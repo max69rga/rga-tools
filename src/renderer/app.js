@@ -59,6 +59,7 @@ const P = {
   sun: '<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.9 4.9l1.4 1.4M17.7 17.7l1.4 1.4M2 12h2M20 12h2M4.9 19.1l1.4-1.4M17.7 6.3l1.4-1.4"/>',
   moon: '<path d="M21 13A9 9 0 1 1 11 3a7 7 0 0 0 10 10Z"/>',
   net: '<path d="M7 17V7M17 7v10M3 7h8M13 17h8"/><circle cx="7" cy="17" r="2"/><circle cx="17" cy="7" r="2"/>',
+  cloud: '<path d="M7 18a5 5 0 1 1 .9-9.9A6 6 0 0 1 19 10a4 4 0 0 1-1 8Z"/><path d="M12 11v6M9.5 14.5 12 17l2.5-2.5"/>',
   restore: '<path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5M12 7v5l3 2"/>',
 };
 const ic = (n, cls = '') => `<svg viewBox="0 0 24 24" class="ico ${cls}">${P[n] || ''}</svg>`;
@@ -71,6 +72,7 @@ const S = {
   profiles: null, diagProfile: 'quick', diag: null, // { state:'running'|'done', steps, cur, result }
   config: null, reports: [], netTest: null,
   mon: { samples: [], on: false },
+  upd: { state: 'idle', data: null, pct: 0, error: null, info: null },
 };
 
 const BRAND = {
@@ -687,9 +689,13 @@ PAGES.settings = () => {
       <select class="input" id="set-temp" style="width:120px">${[80, 85, 90, 95, 100].map(t => `<option value="${t}" ${st.tempLimit === t ? 'selected' : ''}>${t} °C</option>`).join('')}<option value="0" ${!st.tempLimit ? 'selected' : ''}>Désactivée</option></select></div>
     <div class="row"><div class="tool-ic">${ic('gpu')}</div><div class="grow"><b>Ignorer le test 3D</b><div class="sub">Utile sur les PC sans carte graphique compatible ou en bureau à distance.</div></div>
       <label class="switch"><input type="checkbox" id="set-gpu" ${st.skipGpu ? 'checked' : ''}><span></span></label></div>
+    <div class="row"><div class="tool-ic">${ic('cloud')}</div><div class="grow"><b>Vérifier les mises à jour au démarrage</b><div class="sub">Propose automatiquement les nouvelles versions publiées sur GitHub.</div></div>
+      <label class="switch"><input type="checkbox" id="set-upd" ${st.autoUpdate !== false ? 'checked' : ''}><span></span></label></div>
     <div class="row"><div class="tool-ic">${ic('folder')}</div><div class="grow"><b>Rapports de diagnostic</b><div class="sub">Bureau\\Diagnostics RGA</div></div>
       <button class="ghost sm" id="set-reports">${ic('folder')}Ouvrir le dossier</button></div>
   </div>
+  <h2 class="section">Mises à jour</h2>
+  <div class="card" id="upd-card">${updateCard()}</div>
   <h2 class="section">À propos</h2>
   <div class="card about">
     <img src="assets/logo-rga.png" alt="RGA Informatique" />
@@ -701,8 +707,61 @@ BIND.settings = () => {
   $('#set-theme').onclick = async (e) => { const b = e.target.closest('button'); if (!b) return; await save({ theme: b.dataset.v }); applyTheme(b.dataset.v); render(); };
   $('#set-temp').onchange = (e) => save({ tempLimit: +e.target.value });
   $('#set-gpu').onchange = (e) => save({ skipGpu: e.target.checked });
+  $('#set-upd').onchange = (e) => save({ autoUpdate: e.target.checked });
+  bindUpdate();
   $('#set-reports').onclick = async () => { const r = S.reports[0]; if (r) api.openPath(r.file.replace(/[\\/][^\\/]+$/, '')); else toast('Aucun rapport pour le moment.', 'info'); };
 };
+
+// ════════════════════ MISES À JOUR ════════════════════
+function updateCard() {
+  const U = S.upd, d = U.data, info = U.info || {};
+  const modeTxt = { installed: 'version installée', portable: 'version portable', dev: 'mode développement' }[info.mode] || '';
+  let status = '', action = `<button class="ghost" id="upd-check" ${U.state === 'checking' || U.state === 'downloading' ? 'disabled' : ''}>${ic('refresh')}Rechercher</button>`;
+  if (U.state === 'checking') status = 'Recherche en cours…';
+  else if (U.state === 'none') status = `<span class="tag ok">À jour</span> Aucune version plus récente que ${esc(d?.current || S.sys.version)}.`;
+  else if (U.state === 'error') status = `<span class="tag err">Erreur</span> ${esc(U.error)}`;
+  else if (U.state === 'available') { status = `<span class="tag warn">Version ${esc(d.version)} disponible</span>${d.publishedAt ? ` publiée le ${new Date(d.publishedAt).toLocaleDateString('fr-FR')}` : ''}`;
+    action += info.mode === 'dev' ? '' : `<button class="primary" id="upd-dl">${ic('download')}Télécharger</button>`; }
+  else if (U.state === 'downloading') status = `Téléchargement de la version ${esc(d.version)}… <b>${U.pct >= 0 ? U.pct + ' %' : ''}</b>`;
+  else if (U.state === 'ready') { status = `<span class="tag ok">Version ${esc(d.version)} prête</span> RGA Tools va se fermer, se mettre à jour puis se relancer.`;
+    action = `<button class="primary" id="upd-install">${ic('restore')}Installer et redémarrer</button>`; }
+  return `<div style="display:flex;align-items:center;gap:14px;flex-wrap:wrap">
+      <div class="tool-ic">${ic('cloud')}</div>
+      <div style="flex:1;min-width:240px"><h3>RGA Tools v${esc(S.sys.version)} <span class="desc" style="font-weight:400">· ${modeTxt}</span></h3>
+        <div class="desc" style="margin-top:4px">${status || 'Les nouvelles versions sont publiées sur GitHub.'}</div></div>
+      <div class="actions">${action}</div></div>
+    ${U.state === 'downloading' ? `<div class="big-bar"><i style="width:${Math.max(0, U.pct)}%"></i></div>` : ''}
+    ${(U.state === 'available' || U.state === 'ready') && d?.notes ? `<pre class="out">${esc(d.notes.replace(/\r/g, ''))}</pre>` : ''}`;
+}
+function refreshUpdate() {
+  const c = $('#upd-card'); if (c) { c.innerHTML = updateCard(); bindUpdate(); }
+  const b = $('#tb-update');
+  if (b) { const show = ['available', 'downloading', 'ready'].includes(S.upd.state); b.hidden = !show;
+    b.innerHTML = `<span class="dot"></span>${S.upd.state === 'ready' ? 'Redémarrer pour mettre à jour' : `Mise à jour ${esc(S.upd.data?.version || '')}`}`; }
+}
+async function checkUpdate() {
+  S.upd.state = 'checking'; refreshUpdate();
+  const r = await api.update.check();
+  S.upd.data = r;
+  if (r.error) { S.upd.state = 'error'; S.upd.error = r.error; }
+  else S.upd.state = r.available ? 'available' : 'none';
+  refreshUpdate();
+}
+function bindUpdate() {
+  $('#upd-check') && ($('#upd-check').onclick = checkUpdate);
+  $('#upd-dl') && ($('#upd-dl').onclick = async () => {
+    S.upd.state = 'downloading'; S.upd.pct = 0; refreshUpdate();
+    const r = await api.update.download();
+    if (r.error) { S.upd.state = 'error'; S.upd.error = r.error; } else S.upd.state = 'ready';
+    refreshUpdate();
+  });
+  $('#upd-install') && ($('#upd-install').onclick = async () => {
+    if (S.diag?.state === 'running' && !(await confirmBox('Diagnostic en cours', 'Le diagnostic en cours sera annulé.', 'Mettre à jour'))) return;
+    const r = await api.update.install(); if (r.error) toast(r.error, 'error');
+  });
+}
+api.update.onAvailable((r) => { S.upd.data = r; S.upd.state = 'available'; refreshUpdate(); toast(`Version ${r.version} de RGA Tools disponible.`, 'info'); });
+api.update.onProgress((p) => { S.upd.pct = p; const bar = $('#upd-card .big-bar i'); if (bar) bar.style.width = `${Math.max(0, p)}%`; const b = $('#upd-card .desc b'); if (b) b.textContent = p >= 0 ? `${p} %` : ''; });
 
 // ─── Démarrage ───
 (async function init() {
@@ -712,7 +771,7 @@ BIND.settings = () => {
   $('#console-toggle').onclick = () => $('#console').classList.toggle('collapsed');
   $('#console-clear').onclick = () => { $('#console-body').innerHTML = ''; logCount = 0; $('#console-count').textContent = 0; setGlobal(0, 'Prêt'); };
 
-  [S.cat, S.sys, S.settings, S.profiles, S.reports] = await Promise.all([api.catalog(), api.sysInfo(), api.settings.get(), api.diag.profiles(), api.reports.list()]);
+  [S.cat, S.sys, S.settings, S.profiles, S.reports, S.upd.info] = await Promise.all([api.catalog(), api.sysInfo(), api.settings.get(), api.diag.profiles(), api.reports.list(), api.update.info()]);
   applyTheme(S.settings.theme);
   $('#btn-theme').onclick = async () => { const t = S.settings.theme === 'light' ? 'dark' : 'light'; S.settings = await api.settings.set({ theme: t }); applyTheme(t); if (S.page === 'monitor') drawMonitor(); if (S.page === 'settings') render(); };
   S.cat.PROGRAMS.filter(p => p.group === 'essentiels').forEach(p => S.soft.add(p.id));
@@ -723,6 +782,8 @@ BIND.settings = () => {
   const c = $('#tb-center');
   if (S.sys.admin) c.innerHTML = `<span class="badge ok"><span class="dot"></span>Administrateur</span>`;
   else { c.innerHTML = `<button class="badge warn" title="Relancer en administrateur"><span class="dot"></span>Mode standard — relancer en administrateur</button>`; $('button', c).onclick = () => api.relaunchAdmin(); }
+  c.insertAdjacentHTML('beforeend', `<button class="badge live" id="tb-update" hidden style="margin-left:8px"></button>`);
+  $('#tb-update').onclick = () => go('settings');
   renderNav(); render();
   addLog({ msg: `RGA Tools v${S.sys.version} prêt — ${S.sys.host} (${S.sys.is64 ? 'x64' : 'x86'}, ${S.sys.admin ? 'administrateur' : 'standard'}).`, level: 'success' });
 })();

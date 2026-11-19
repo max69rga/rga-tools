@@ -10,6 +10,7 @@ const monitor = require('./lib/monitor');
 const sysinfo = require('./lib/sysinfo');
 const diag = require('./lib/diag');
 const report = require('./lib/report');
+const updater = require('./lib/updater');
 
 app.setAppUserModelId('RGA.Tools');
 if (!app.requestSingleInstanceLock()) app.quit();
@@ -19,7 +20,7 @@ const ASSETS = path.join(__dirname, 'renderer', 'assets');
 
 // ───────────────────────── Paramètres ─────────────────────────
 const SETTINGS_FILE = path.join(app.getPath('userData'), 'settings.json');
-const DEFAULTS = { theme: 'dark', tempLimit: 95, skipGpu: false };
+const DEFAULTS = { theme: 'dark', tempLimit: 95, skipGpu: false, autoUpdate: true };
 let settings = { ...DEFAULTS };
 try { settings = { ...DEFAULTS, ...JSON.parse(fs.readFileSync(SETTINGS_FILE, 'utf8')) }; } catch {}
 const saveSettings = () => { try { fs.writeFileSync(SETTINGS_FILE, JSON.stringify(settings, null, 1)); } catch {} };
@@ -33,7 +34,13 @@ function createWindow() {
     webPreferences: { preload: path.join(__dirname, 'preload.js'), contextIsolation: true, nodeIntegration: false, sandbox: true },
   });
   win.loadFile(path.join(__dirname, 'renderer', 'index.html'));
-  win.once('ready-to-show', () => win.show());
+  win.once('ready-to-show', () => {
+    win.show();
+    // Vérification silencieuse des mises à jour au démarrage.
+    if (settings.autoUpdate && updater.mode() !== 'dev') setTimeout(async () => {
+      try { const r = await updater.check(); if (r.available) { send('update:available', r); log(`Mise à jour disponible : version ${r.version}.`, 'success'); } } catch {}
+    }, 4000);
+  });
   win.on('maximize', () => send('win:state', { maximized: true }));
   win.on('unmaximize', () => send('win:state', { maximized: false }));
   win.on('closed', () => { monitor.stop(); diag.cancelDiag(); });
@@ -92,6 +99,19 @@ ipcMain.handle('relaunch:admin', () => {
   spawn('powershell.exe', ['-NoProfile', '-Command', `Start-Process -FilePath '${exe.replace(/'/g, "''")}'${args} -Verb RunAs`], { detached: true, stdio: 'ignore', windowsHide: true }).unref();
   setTimeout(() => app.quit(), 400);
 });
+
+// ───────────────────────── Mises à jour ─────────────────────────
+ipcMain.handle('update:check', async () => {
+  try { return await updater.check(); } catch (e) { return { current: app.getVersion(), error: e.message }; }
+});
+ipcMain.handle('update:download', async () => {
+  try { await updater.download((pct) => send('update:progress', pct)); return { ok: true }; }
+  catch (e) { log(`Mise à jour : ${e.message}`, 'error'); return { error: e.message }; }
+});
+ipcMain.handle('update:install', () => {
+  try { diag.cancelDiag(); updater.install(); return { ok: true }; } catch (e) { return { error: e.message }; }
+});
+ipcMain.handle('update:info', () => ({ repo: updater.repo, mode: updater.mode(), hasToken: updater.hasToken, version: app.getVersion() }));
 
 // ───────────────────────── Diagnostic / monitoring / config ─────────────────────────
 let offLive = null;

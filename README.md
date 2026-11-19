@@ -9,7 +9,7 @@
 </p>
 
 <p align="center">
-  <img alt="Version" src="https://img.shields.io/badge/version-3.0.0-c31a24" />
+  <img alt="Version" src="https://img.shields.io/badge/version-3.1.0-c31a24" />
   <img alt="Plateforme" src="https://img.shields.io/badge/plateforme-Windows%2010%20%2F%2011-555" />
   <img alt="Electron" src="https://img.shields.io/badge/Electron-33-47848f" />
 </p>
@@ -81,11 +81,26 @@ src/
 └─ renderer/            Interface (HTML / CSS / JS) et logos
 ```
 
+### Mises à jour automatiques
+
+Au démarrage, RGA Tools interroge la dernière release GitHub du dépôt indiqué par `updateRepo` dans `package.json`. Si une version plus récente existe, elle est proposée (barre de titre et **Paramètres → Mises à jour**) :
+
+- **version installée** : téléchargement de `RGA-Tools-x.y.z-setup.exe`, installation silencieuse, relance automatique ;
+- **version portable** : téléchargement de `RGA-Tools-x.y.z-portable.exe`, remplacement de l'exe après fermeture, relance.
+
+Le dépôt étant privé, un **jeton GitHub en lecture seule** est intégré à l'exe au moment du build :
+
+1. Créer un *fine-grained personal access token* sur GitHub (*Settings → Developer settings → Personal access tokens → Fine-grained tokens*) : expiration *No expiration*, accès au seul dépôt `rga-tools`, permission **Contents : Read-only**.
+2. Coller le jeton dans un fichier `.update-token` à la racine du projet (ignoré par Git).
+3. `npm run dist` l'intègre automatiquement (`src/lib/update-token.json`, également ignoré).
+
+> Le jeton peut être extrait de l'exe par une personne motivée : il ne donne qu'un accès en lecture au dépôt. En cas de fuite, le révoquer sur GitHub puis publier un nouveau build avec un nouveau jeton (les versions déjà installées devront alors être mises à jour manuellement une fois).
+
 ### Publier une version
 
 1. Mettre à jour `version` dans `package.json` et ajouter une entrée dans `CHANGELOG.md`.
-2. `npm run dist`
-3. Commit, tag `vX.Y.Z`, push, puis créer la release GitHub avec les deux `.exe` de `dist/`.
+2. Commit des changements.
+3. `npm run dist` puis `npm run release` (tag `vX.Y.Z`, push, release GitHub avec les deux `.exe` et les notes du CHANGELOG).
 
 ## Notes
 

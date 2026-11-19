@@ -2,6 +2,15 @@
 
 Format inspiré de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/), versions selon [SemVer](https://semver.org/lang/fr/).
 
+## [3.1.0] — 2026-11-19
+
+### Ajouté
+- **Mises à jour automatiques via GitHub** : vérification au démarrage (désactivable dans Paramètres), badge dans la barre de titre, notes de version, téléchargement avec contrôle de taille et d'empreinte SHA-256.
+  - Version installée : le nouvel installeur s'exécute en silencieux puis relance RGA Tools.
+  - Version portable : l'exe est remplacé automatiquement après fermeture, puis relancé.
+- Jeton GitHub en lecture seule intégré au build (`.update-token`, jamais versionné) pour lire les releases du dépôt privé.
+- Script `npm run release` : tag, push et publication de la release avec les deux exe et les notes du CHANGELOG.
+
 ## [3.0.0] — 2026-11-19
 
 Fusion de RGA Tools avec un module de diagnostic matériel inspiré de UserDiag, et nouvelle identité visuelle RGA Informatique.

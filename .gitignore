@@ -12,3 +12,7 @@ build/icon.svg
 Thumbs.db
 .vscode/
 .idea/
+
+# Jeton de mise à jour (secret, jamais versionné)
+.update-token
+src/lib/update-token.json

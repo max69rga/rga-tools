@@ -1,7 +1,7 @@
 {
   "name": "rga-tools",
   "productName": "RGA Tools",
-  "version": "3.0.0",
+  "version": "3.1.0",
   "private": true,
   "description": "RGA Informatique — boîte à outils technicien : diagnostic, monitoring, installation, nettoyage, réparation.",
   "main": "src/main.js",
@@ -10,7 +10,8 @@
   "scripts": {
     "start": "electron .",
     "icons": "electron scripts/make-icon.js",
-    "dist": "electron-builder --win portable nsis --x64"
+    "dist": "node scripts/embed-token.js && electron-builder --win portable nsis --x64",
+    "release": "node scripts/release.js"
   },
   "build": {
     "appId": "rga.tools",
@@ -51,5 +52,6 @@
     "electron": "33.2.1",
     "electron-builder": "25.1.8",
     "png-to-ico": "2.1.8"
-  }
+  },
+  "updateRepo": "orpx0lyks-ux/rga-tools"
 }
