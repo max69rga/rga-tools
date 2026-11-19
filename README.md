@@ -9,7 +9,7 @@
 </p>
 
 <p align="center">
-  <img alt="Version" src="https://img.shields.io/badge/version-3.2.0-c31a24" />
+  <img alt="Version" src="https://img.shields.io/badge/version-3.3.0-c31a24" />
   <img alt="Plateforme" src="https://img.shields.io/badge/plateforme-Windows%2010%20%2F%2011-555" />
   <img alt="Electron" src="https://img.shields.io/badge/Electron-33-47848f" />
   <a href="https://github.com/max69rga/rga-tools/actions/workflows/release.yml"><img alt="Build" src="https://github.com/max69rga/rga-tools/actions/workflows/release.yml/badge.svg" /></a>
@@ -24,6 +24,7 @@
 | **Diagnostic PC** | 4 profils (export config, rapide, long, extrême) : stress CPU / GPU / RAM, débit disques, analyse des journaux, note sur 100, rapport HTML local |
 | **Monitoring** | CPU, fréquence, RAM, GPU, disques, réseau, température en temps réel |
 | **Configuration PC** | Inventaire matériel et logiciel + santé du système sur 30 jours |
+| **Journaux Windows** | Lecture des journaux Système / Application / Defender, problèmes connus expliqués (écrans bleus décodés, disques, pilotes, mises à jour, réseau…) avec la marche à suivre, export CSV |
 | **Outils de test** | OCCT, HWiNFO, Cinebench, diagnostic mémoire Windows, CrystalDiskInfo, FurMark, Core Temp |
 | **Logiciels** | Installation silencieuse depuis les sites officiels (x64 / x86) |
 | **Microsoft Office** | 2013 → 2024 Professional Plus via Office Deployment Tool, désinstallation propre |
@@ -75,6 +76,8 @@ src/
 │  ├─ util.js           Commandes cmd / PowerShell, téléchargements
 │  ├─ sysinfo.js        Inventaire matériel et contrôles de santé (CIM / WMI)
 │  ├─ monitor.js        Capteurs temps réel (compteurs de performance)
+│  ├─ events.js         Journaux d'événements Windows + base de diagnostic
+│  ├─ updater.js        Mises à jour via les releases GitHub
 │  ├─ diag.js           Moteur de diagnostic : profils, tests, analyse, note
 │  ├─ stress-worker.js  Thread de charge CPU / test mémoire
 │  └─ report.js         Rapport HTML

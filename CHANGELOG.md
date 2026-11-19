@@ -2,6 +2,18 @@
 
 Format inspiré de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/), versions selon [SemVer](https://semver.org/lang/fr/).
 
+## [3.3.0] — 2026-11-19
+
+### Ajouté
+- **Journaux Windows** : nouvelle page qui lit les journaux Système, Application et Microsoft Defender (24 h à 90 jours, filtres par niveau) et explique les problèmes reconnus avec la cause probable et la marche à suivre.
+  - Écrans bleus avec décodage des codes d'arrêt (0x124, 0x133, 0x116, 0x1A…), arrêts inattendus, erreurs matérielles WHEA.
+  - Disques (secteurs défectueux, pagination, contrôleur, NTFS, réinitialisations SSD) avec le nom du disque concerné.
+  - Pilote graphique (TDR), bridage du processeur, mémoire épuisée, services en échec, plantages d'applications (module fautif), .NET.
+  - Windows Update (code d'erreur), réseau (conflit IP, DHCP, DNS, carte réseau), menaces Defender, VSS, BitLocker…
+  - Événements bénins connus (DCOM 10016, Perflib…) masqués ; recherche en ligne pour les événements non reconnus.
+  - Graphique par jour, filtre texte, boutons d'action (vérification du disque, SFC, DISM, Gestionnaire de périphériques, fichiers de vidage…), export CSV.
+- Le **Diagnostic PC** et son rapport intègrent l'analyse des journaux des 30 derniers jours.
+
 ## [3.2.0] — 2026-11-19
 
 ### Modifié

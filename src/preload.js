@@ -16,6 +16,7 @@ contextBridge.exposeInMainWorld('rga', {
   config: invoke('config:get'),
   diag: { profiles: invoke('diag:profiles'), run: invoke('diag:run'), cancel: invoke('diag:cancel'), onStep: on('diag:step'), onTick: on('diag:tick') },
   reports: { list: invoke('report:list') },
+  events: { analyze: invoke('events:analyze'), tool: invoke('events:tool'), export: invoke('events:export') },
   update: { check: invoke('update:check'), download: invoke('update:download'), install: invoke('update:install'), info: invoke('update:info'), onAvailable: on('update:available'), onProgress: on('update:progress') },
   soft: { install: invoke('soft:install') },
   office: { install: invoke('office:install'), offscrub: invoke('office:offscrub') },

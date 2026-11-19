@@ -11,6 +11,7 @@ const sysinfo = require('./lib/sysinfo');
 const diag = require('./lib/diag');
 const report = require('./lib/report');
 const updater = require('./lib/updater');
+const events = require('./lib/events');
 
 app.setAppUserModelId('RGA.Tools');
 if (!app.requestSingleInstanceLock()) app.quit();
@@ -55,7 +56,7 @@ function snapshots(dir) {
     await wait(2500);
     const pages = (process.env.RGA_SNAP_PAGES || 'home,diag,monitor,config,tools,soft,office,ext,clean,utils,optim,lic,settings').split(',');
     for (const id of pages) {
-      await win.webContents.executeJavaScript(`${process.env.RGA_SNAP_THEME ? `applyTheme('${process.env.RGA_SNAP_THEME}');` : ''}go('${id}')`);
+      await win.webContents.executeJavaScript(`${process.env.RGA_SNAP_THEME ? `applyTheme('${process.env.RGA_SNAP_THEME}');` : ''}go('${id}');${process.env.RGA_SNAP_JS || ''}`);
       await wait(+(process.env.RGA_SNAP_WAIT || 900));
       fs.writeFileSync(path.join(dir, `${id}.png`), (await win.webContents.capturePage()).toPNG());
     }
@@ -98,6 +99,52 @@ ipcMain.handle('relaunch:admin', () => {
   const args = app.isPackaged ? '' : ` -ArgumentList '${path.resolve(__dirname, '..').replace(/'/g, "''")}'`;
   spawn('powershell.exe', ['-NoProfile', '-Command', `Start-Process -FilePath '${exe.replace(/'/g, "''")}'${args} -Verb RunAs`], { detached: true, stdio: 'ignore', windowsHide: true }).unref();
   setTimeout(() => app.quit(), 400);
+});
+
+// ───────────────────────── Journaux Windows ─────────────────────────
+ipcMain.handle('events:analyze', async (_e, opts) => {
+  log(`Lecture des journaux Windows (${opts.days} jour(s))…`);
+  const raw = await events.fetchEvents(opts);
+  const res = events.analyze(raw, opts);
+  log(`${res.total} événement(s) analysé(s) — ${res.summary}`, res.problems.some(p => p.sev === 'error') ? 'warn' : 'success');
+  return res;
+});
+ipcMain.handle('events:tool', async (_e, tool) => {
+  if (tool === 'drivers') return run('start "" devmgmt.msc');
+  if (tool === 'eventvwr') return run('start "" eventvwr.msc');
+  if (tool === 'wu') return shell.openExternal('ms-settings:troubleshoot');
+  if (tool === 'minidump') {
+    const dir = path.join(process.env.SystemRoot || 'C:\\Windows', 'Minidump');
+    if (fs.existsSync(dir)) return shell.openPath(dir);
+    log("Aucun dossier Minidump : Windows n'a pas conservé de fichier de vidage.", 'warn');
+    return null;
+  }
+  if (tool === 'chkdsk') {
+    log('> chkdsk C: /scan', 'cmd');
+    progress('global', -1, 'Vérification du disque C:');
+    const r = await run('chkdsk C: /scan', {
+      timeout: 3600000,
+      onLine: (l) => { const t = l.replace(/\0/g, '').trim(); if (t && !/^\d+\s*%|Progression|Progress/i.test(t)) log(`   ${t}`, 'dim'); },
+    });
+    progress('global', 100, 'Terminé');
+    log(r.code === 0 ? 'Aucun problème trouvé sur C:.' : `chkdsk terminé (code ${r.code}) : des erreurs peuvent nécessiter « chkdsk C: /f » au redémarrage.`, r.code === 0 ? 'success' : 'warn');
+    return r.code;
+  }
+  return null;
+});
+ipcMain.handle('events:export', async (_e, groups) => {
+  const r = await dialog.showSaveDialog(win, {
+    title: "Exporter l'analyse des journaux",
+    defaultPath: path.join(app.getPath('desktop'), `Journaux_${os.hostname()}_${new Date().toISOString().slice(0, 10)}.csv`),
+    filters: [{ name: 'CSV', extensions: ['csv'] }],
+  });
+  if (r.canceled || !r.filePath) return null;
+  const q = (v) => `"${String(v ?? '').replace(/"/g, '""').replace(/\r?\n/g, ' ')}"`;
+  const rows = [['Gravité', 'Catégorie', 'Problème', 'Source', 'ID', 'Nombre', 'Premier', 'Dernier', 'Cause', 'Action', 'Exemple']];
+  for (const g of groups) rows.push([g.sev, g.cat, g.title, g.provider, g.id, g.count, g.first, g.last, g.cause, g.action, g.samples?.[0]?.m]);
+  fs.writeFileSync(r.filePath, '\ufeff' + rows.map(x => x.map(q).join(';')).join('\r\n'), 'utf8');
+  log(`Analyse exportée : ${r.filePath}`, 'success');
+  return r.filePath;
 });
 
 // ───────────────────────── Mises à jour ─────────────────────────

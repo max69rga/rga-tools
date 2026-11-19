@@ -6,6 +6,7 @@ const os = require('os');
 const { run, psJson, log, emit, sleep } = require('./util');
 const monitor = require('./monitor');
 const sysinfo = require('./sysinfo');
+const events = require('./events');
 
 const PROFILES = {
   config:  { name: 'Export configuration', steps: ['inventory', 'health'] },
@@ -166,9 +167,15 @@ function analyse(R) {
   const tests = R.tests || {};
 
   // Stabilité
-  if (H.whea > 0) add('error', 'Stabilité', `${H.whea} erreur(s) matérielle(s) WHEA sur 30 jours`, `Dernière : ${H.wheaLast}. Indique souvent une instabilité CPU/RAM (overclocking, XMP, tension) ou un composant défaillant.`);
-  if (H.bsod > 0) add('error', 'Stabilité', `${H.bsod} écran(s) bleu(s) sur 30 jours`, `Dernier : ${H.bsodLast}.`);
-  if (H.unexpectedShutdown > 0) add('warn', 'Stabilité', `${H.unexpectedShutdown} arrêt(s) inattendu(s) sur 30 jours`, 'Coupures de courant, appui long sur le bouton, ou problème d\'alimentation / surchauffe.');
+  // Problèmes identifiés dans les journaux Windows (plus précis que les simples compteurs).
+  const covered = new Set();
+  for (const g of R.events?.problems || []) {
+    covered.add(g.rule);
+    add(g.sev, `Journaux · ${g.cat}`, `${g.title} (${g.count}× en 30 j)`, [g.cause, g.action && `À faire : ${g.action}`].filter(Boolean).join(' '));
+  }
+  if (H.whea > 0 && !covered.has('whea')) add('error', 'Stabilité', `${H.whea} erreur(s) matérielle(s) WHEA sur 30 jours`, `Dernière : ${H.wheaLast}. Indique souvent une instabilité CPU/RAM (overclocking, XMP, tension) ou un composant défaillant.`);
+  if (H.bsod > 0 && !covered.has('bsod')) add('error', 'Stabilité', `${H.bsod} écran(s) bleu(s) sur 30 jours`, `Dernier : ${H.bsodLast}.`);
+  if (H.unexpectedShutdown > 0 && !covered.has('kp41')) add('warn', 'Stabilité', `${H.unexpectedShutdown} arrêt(s) inattendu(s) sur 30 jours`, 'Coupures de courant, appui long sur le bouton, ou problème d\'alimentation / surchauffe.');
   if (R.wheaDuring > 0) add('error', 'Stabilité', 'Erreur WHEA détectée pendant les tests', 'Le matériel est instable sous charge.');
   if (H.appCrashes > 20) add('info', 'Stabilité', `${H.appCrashes} plantages d'applications sur 30 jours`);
   if (Array.isArray(H.badDevices) && H.badDevices.length) add('warn', 'Pilotes', `${H.badDevices.length} périphérique(s) en erreur`, H.badDevices.map(d => `${d.name} (code ${d.code})`).join(' · '));
@@ -219,7 +226,7 @@ function analyse(R) {
     if (d.temp >= 70) add('warn', 'Stockage', `Disque « ${d.name} » à ${d.temp} °C`);
     if (/HDD/i.test(d.media) && /Windows/i.test(inv.os?.name || '') && (inv.disks || []).length === 1) add('info', 'Stockage', 'Windows installé sur un disque dur mécanique', 'Un SSD rendrait le PC nettement plus réactif.');
   }
-  if (H.diskErrors > 0) add('warn', 'Stockage', `${H.diskErrors >= 1000 ? '1000+' : H.diskErrors} événement(s) d'erreur disque sur 30 jours`, 'Vérifier les câbles / ports, ou un périphérique USB défectueux.');
+  if (H.diskErrors > 0 && !covered.has('disk')) add('warn', 'Stockage', `${H.diskErrors >= 1000 ? '1000+' : H.diskErrors} événement(s) d'erreur disque sur 30 jours`, 'Vérifier les câbles / ports, ou un périphérique USB défectueux.');
   for (const v of inv.volumes || []) {
     const pct = v.sizeGB ? (v.freeGB / v.sizeGB) * 100 : 100;
     if (pct < 10) add('warn', 'Stockage', `Lecteur ${v.letter}: presque plein`, `${v.freeGB} Go libres sur ${v.sizeGB} Go.`);
@@ -273,7 +280,15 @@ async function runDiag(profileId, opts = {}) {
       log(`${STEP_LABEL[k]}${d ? ` (${d >= 60 ? Math.round(d / 60) + ' min' : d + ' s'})` : ''}…`);
       if (current.cancel) throw new Error('cancel');
       if (k === 'inventory') R.inventory = await sysinfo.getInventory();
-      else if (k === 'health') R.health = await sysinfo.getHealth();
+      else if (k === 'health') {
+        R.health = await sysinfo.getHealth();
+        // Journaux Windows : problèmes connus des 30 derniers jours.
+        try {
+          const ev = events.analyze(await events.fetchEvents({ days: 30, levels: [1, 2, 3], logs: ['System', 'Application', 'Defender'] }), { days: 30 });
+          R.events = { total: ev.total, totals: ev.totals, summary: ev.summary, problems: ev.problems.map(({ samples, ...g }) => ({ ...g, sample: samples[0]?.m || '' })) };
+          log(`   Journaux : ${ev.summary}`, ev.problems.some(p => p.sev === 'error') ? 'warn' : 'dim');
+        } catch (e) { log(`   Journaux illisibles : ${e.message}`, 'warn'); }
+      }
       else if (k === 'idle') { const rec = monitor.record(); await hold(+d, ctx, STEP_LABEL.idle); const s = rec.stop(); R.tests.idle = { kind: 'idle', seconds: +d, sensors: sampleStats(s), series: s.map(x => ({ cpu: x.cpu, mhz: x.mhz, gpu: x.gpu, temp: x.temp })) };
         if (R.tests.idle.sensors.cpuAvg > 15) log(`   Processeur utilisé à ${R.tests.idle.sensors.cpuAvg} % au repos : les résultats peuvent être faussés.`, 'warn'); }
       else if (k === 'disk') R.disk = await diskPhase();

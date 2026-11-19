@@ -60,6 +60,7 @@ const P = {
   moon: '<path d="M21 13A9 9 0 1 1 11 3a7 7 0 0 0 10 10Z"/>',
   net: '<path d="M7 17V7M17 7v10M3 7h8M13 17h8"/><circle cx="7" cy="17" r="2"/><circle cx="17" cy="7" r="2"/>',
   cloud: '<path d="M7 18a5 5 0 1 1 .9-9.9A6 6 0 0 1 19 10a4 4 0 0 1-1 8Z"/><path d="M12 11v6M9.5 14.5 12 17l2.5-2.5"/>',
+  list: '<path d="M8 6h13M8 12h13M8 18h13"/><circle cx="4" cy="6" r="1" fill="currentColor"/><circle cx="4" cy="12" r="1" fill="currentColor"/><circle cx="4" cy="18" r="1" fill="currentColor"/>',
   restore: '<path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5M12 7v5l3 2"/>',
 };
 const ic = (n, cls = '') => `<svg viewBox="0 0 24 24" class="ico ${cls}">${P[n] || ''}</svg>`;
@@ -72,6 +73,7 @@ const S = {
   profiles: null, diagProfile: 'quick', diag: null, // { state:'running'|'done', steps, cur, result }
   config: null, reports: [], netTest: null,
   mon: { samples: [], on: false },
+  ev: { days: 7, levels: { 1: true, 2: true, 3: true }, logs: { System: true, Application: true, Defender: true }, res: null, loading: false, open: new Set(), q: '', showAll: false },
   upd: { state: 'idle', data: null, pct: 0, error: null, info: null },
 };
 
@@ -86,6 +88,7 @@ const NAV = [
   { id: 'diag', label: 'Diagnostic PC', icon: 'stetho' },
   { id: 'monitor', label: 'Monitoring', icon: 'monitor' },
   { id: 'config', label: 'Configuration PC', icon: 'pc' },
+  { id: 'events', label: 'Journaux Windows', icon: 'list' },
   { id: 'tools', label: 'Outils de test', icon: 'pulse' },
   { sec: 'Installation' },
   { id: 'soft', label: 'Logiciels', icon: 'box' },
@@ -187,6 +190,7 @@ PAGES.home = () => {
     ['diag', 'stetho', 'Diagnostic PC', 'Tests de charge CPU / GPU / RAM / disques + rapport'],
     ['monitor', 'monitor', 'Monitoring', 'Charge, fréquences et débits en temps réel'],
     ['config', 'pc', 'Configuration PC', 'Inventaire matériel et santé du système'],
+    ['events', 'list', 'Journaux Windows', 'Erreurs Windows expliquées, avec la marche à suivre'],
     ['soft', 'box', 'Logiciels', 'Installation silencieuse des essentiels'],
     ['office', 'office', 'Microsoft Office', 'Déploiement via Office Deployment Tool'],
     ['clean', 'shield', 'Nettoyage', 'Antimalwares et analyse hors-ligne'],
@@ -454,6 +458,130 @@ BIND.config = () => {
   $('#cfg-refresh').onclick = loadConfig;
   $('#cfg-export').onclick = () => { S.diagProfile = 'config'; go('diag'); startDiag(); };
   if (!S.config && !S.configLoading) loadConfig();
+};
+
+// ════════════════════ JOURNAUX WINDOWS ════════════════════
+const EV_TOOLS = {
+  chkdsk: ['Vérifier le disque C:', 'disk', async () => { setBusy(true); showConsole(); try { await api.events.tool('chkdsk'); } finally { setBusy(false); setGlobal(0, 'Prêt'); } }],
+  drivers: ['Gestionnaire de périphériques', 'settings', () => api.events.tool('drivers')],
+  wu: ['Résolution des problèmes', 'wrench', () => api.events.tool('wu')],
+  minidump: ['Fichiers de vidage', 'folder', () => api.events.tool('minidump')],
+  diag: ['Diagnostic PC', 'stetho', () => go('diag')],
+  sfc: ['Lancer SFC', 'shield', async () => { setBusy(true); showConsole(); try { await api.repair('sfc'); } finally { setBusy(false); setGlobal(0, 'Prêt'); } }],
+  dism: ['Lancer DISM', 'wrench', async () => { setBusy(true); showConsole(); try { await api.repair('dism'); } finally { setBusy(false); setGlobal(0, 'Prêt'); } }],
+  net: ['Réparation réseau', 'globe', () => { S.utilsTab = 'net'; go('utils'); }],
+  clean: ['Nettoyage', 'virus', () => go('clean')],
+};
+const SEV_UI = { error: ['err', 'Problème', 'x'], warn: ['warn', 'Attention', 'alert'], info: ['', 'Info', 'info'], unknown: ['', 'Non reconnu', 'info'], ignore: ['', 'Sans gravité', 'check'] };
+const fmtDate = (iso) => new Date(iso).toLocaleString('fr-FR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' });
+
+function evChart(res) {
+  const days = res.days || 7, out = [];
+  const max = Math.max(1, ...Object.values(res.perDay).map(d => d.c + d.e + d.w));
+  for (let i = days - 1; i >= 0; i--) {
+    const d = new Date(Date.now() - i * 864e5).toISOString().slice(0, 10);
+    const v = res.perDay[d] || { c: 0, e: 0, w: 0 };
+    const h = (n) => `${(n / max) * 100}%`;
+    out.push(`<div class="dbar" title="${new Date(d).toLocaleDateString('fr-FR')} : ${v.c} critique(s), ${v.e} erreur(s), ${v.w} avertissement(s)">
+      <i class="w" style="height:${h(v.w)}"></i><i class="e" style="height:${h(v.e)}"></i><i class="c" style="height:${h(v.c)}"></i></div>`);
+  }
+  return `<div class="daychart">${out.join('')}</div>
+    <div class="legend"><span><i class="c"></i>Critique</span><span><i class="e"></i>Erreur</span><span><i class="w"></i>Avertissement</span><span class="mut">${days} derniers jours</span></div>`;
+}
+
+function evGroupDetail(g) {
+  const tool = g.tool && EV_TOOLS[g.tool];
+  const search = `https://www.google.com/search?q=${encodeURIComponent(`"${g.provider}" event ID ${g.id}`)}`;
+  return `<div class="ev-detail">
+    ${g.cause ? `<p><b>Cause probable :</b> ${esc(g.cause)}</p>` : ''}
+    ${g.action ? `<p><b>Que faire :</b> ${esc(g.action)}</p>` : ''}
+    <div class="ev-samples">${g.samples.map(s => `<div><span class="t">${fmtDate(s.t)}</span><span>${esc(s.m)}</span></div>`).join('')}</div>
+    <div class="actions" style="margin-top:10px">
+      ${tool ? `<button class="primary sm" data-evtool="${g.tool}" data-busy>${ic(tool[1])}${tool[0]}</button>` : ''}
+      <button class="ghost sm" data-evsearch="${esc(search)}">${ic('external')}Rechercher en ligne</button>
+      <span class="mut" style="font-size:12px">${esc(g.provider)} · ID ${g.id} · ${esc(g.log)}</span>
+    </div></div>`;
+}
+
+PAGES.events = () => {
+  const E = S.ev, R = E.res;
+  const chip = (group, k, label) => `<button class="chip ${E[group][k] ? 'on' : ''}" data-chip="${group}:${k}">${label}</button>`;
+  let body = '';
+  if (E.loading) body = `<div class="card empty">Lecture et analyse des journaux…</div>`;
+  else if (!R) body = `<div class="card empty">Choisissez la période puis cliquez sur « Analyser ». Les erreurs connues (écrans bleus, disques, pilotes, mises à jour, réseau…) sont expliquées avec la marche à suivre.</div>`;
+  else {
+    const crit = R.problems.filter(p => p.sev === 'error').length;
+    const q = (E.q || '').toLowerCase();
+    const shown = R.groups.filter(g => (E.showAll || g.sev !== 'ignore') && (!q || `${g.title} ${g.provider} ${g.id} ${g.cat}`.toLowerCase().includes(q)));
+    body = `
+    <div class="stats">
+      <div class="stat"><div class="k">Critiques</div><div class="v" style="color:${R.totals.critical ? 'var(--err)' : ''}">${R.totals.critical}</div></div>
+      <div class="stat"><div class="k">Erreurs</div><div class="v" style="color:${R.totals.error ? 'var(--err)' : ''}">${R.totals.error}</div></div>
+      <div class="stat"><div class="k">Avertissements</div><div class="v">${R.totals.warning}</div></div>
+      <div class="stat"><div class="k">Problèmes identifiés</div><div class="v" style="color:${crit ? 'var(--err)' : R.problems.length ? 'var(--warn)' : 'var(--ok)'}">${R.problems.length}</div></div>
+    </div>
+    <div class="note ${crit ? 'warn' : ''}" style="margin-top:12px">${ic(crit ? 'alert' : 'info')}<div><b>${esc(R.summary)}</b> ${R.total} événement(s) analysé(s).</div></div>
+    <div class="card">${evChart(R)}</div>
+    <h2 class="section">Diagnostic <span class="count">${R.problems.length}</span></h2>
+    ${R.problems.length ? `<div class="list">${R.problems.map(g => { const [cls, , icon] = SEV_UI[g.sev]; const open = E.open.has(g.key); return `
+      <div class="ev-row ${open ? 'open' : ''}">
+        <div class="row clickable" data-evopen="${esc(g.key)}">
+          <span class="lv ${g.sev}">${ic(icon)}</span>
+          <div class="grow"><div class="area">${esc(g.cat)}</div><b>${esc(g.title)}</b><div class="sub">${esc(g.cause)}</div></div>
+          <span class="tag ${cls}">${g.count}×</span><span class="tag">Dernier : ${fmtDate(g.last)}</span>${ic('chevron', 'chev')}
+        </div>${open ? evGroupDetail(g) : ''}</div>`; }).join('')}</div>`
+      : `<div class="card empty">${ic('check')} Aucun problème connu n'a été détecté sur cette période.</div>`}
+    <h2 class="section">Tous les événements <span class="count">${shown.length} groupe(s)</span></h2>
+    <div class="actions" style="margin-bottom:10px">
+      <input class="input" id="ev-q" placeholder="Filtrer (source, ID, texte…)" value="${esc(E.q || '')}" style="flex:1;min-width:240px;font-family:var(--font);letter-spacing:0" />
+      <label class="mut" style="display:flex;gap:8px;align-items:center;font-size:12.5px"><span class="switch"><input type="checkbox" id="ev-all" ${E.showAll ? 'checked' : ''}><span></span></span>Afficher les événements sans gravité</label>
+    </div>
+    <div class="list">${shown.length ? shown.map(g => { const [cls, label] = SEV_UI[g.sev]; const open = E.open.has('all:' + g.key); return `
+      <div class="ev-row ${open ? 'open' : ''}">
+        <div class="row clickable" data-evopen="all:${esc(g.key)}">
+          <span class="tag ${cls}" style="min-width:86px;text-align:center">${label}</span>
+          <div class="grow"><b>${esc(g.title)}</b><div class="sub">${esc(g.provider)} · ID ${g.id} · ${esc(g.log)}</div></div>
+          <span class="tag">${g.count}×</span><span class="tag">${fmtDate(g.last)}</span>${ic('chevron', 'chev')}
+        </div>${open ? evGroupDetail(g) : ''}</div>`; }).join('') : '<div class="empty">Aucun événement.</div>'}</div>`;
+  }
+  return head('Journaux Windows', 'Lit les journaux d\'événements de Windows et explique les erreurs connues, avec la marche à suivre.',
+    `<button class="ghost" id="ev-viewer">${ic('external')}Observateur d'événements</button>
+     <button class="ghost" id="ev-export" ${R ? '' : 'disabled'}>${ic('download')}Exporter (.csv)</button>
+     <button class="primary" id="ev-go" data-busy>${ic('scan')}Analyser</button>`) + `
+  <div class="card" style="margin-bottom:16px">
+    <div class="form-row" style="gap:22px">
+      <div class="field" style="flex:0 0 auto;min-width:0"><label>Période</label>
+        <div class="seg" id="ev-days">${[[1, '24 h'], [7, '7 jours'], [30, '30 jours'], [90, '90 jours']].map(([d, l]) => `<button data-v="${d}" class="${E.days === d ? 'on' : ''}">${l}</button>`).join('')}</div></div>
+      <div class="field" style="flex:0 0 auto;min-width:0"><label>Niveaux</label><div class="chips">${chip('levels', 1, 'Critique')}${chip('levels', 2, 'Erreur')}${chip('levels', 3, 'Avertissement')}</div></div>
+      <div class="field" style="flex:0 0 auto;min-width:0"><label>Journaux</label><div class="chips">${chip('logs', 'System', 'Système')}${chip('logs', 'Application', 'Application')}${chip('logs', 'Defender', 'Defender')}</div></div>
+    </div>
+  </div>${body}`;
+};
+
+async function analyzeEvents() {
+  const E = S.ev;
+  const levels = Object.keys(E.levels).filter(k => E.levels[k]).map(Number);
+  const logs = Object.keys(E.logs).filter(k => E.logs[k]);
+  if (!levels.length || !logs.length) return toast('Sélectionnez au moins un niveau et un journal.', 'warn');
+  E.loading = true; E.open = new Set(); setBusy(true); rerender('events');
+  try { E.res = await api.events.analyze({ days: E.days, levels, logs }); }
+  catch (e) { toast(`Erreur : ${e.message}`, 'error'); }
+  finally { E.loading = false; setBusy(false); rerender('events'); }
+}
+
+BIND.events = () => {
+  const E = S.ev;
+  $('#ev-go').onclick = analyzeEvents;
+  $('#ev-viewer').onclick = () => api.events.tool('eventvwr');
+  $('#ev-export').onclick = () => E.res && api.events.export(E.res.groups);
+  $('#ev-days').onclick = (e) => { const b = e.target.closest('button'); if (!b) return; E.days = +b.dataset.v; $$('#ev-days button').forEach(x => x.classList.toggle('on', x === b)); };
+  $$('[data-chip]').forEach(c => c.onclick = () => { const [g, k] = c.dataset.chip.split(':'); E[g][k] = !E[g][k]; c.classList.toggle('on', E[g][k]); });
+  $$('[data-evopen]').forEach(r => r.onclick = () => { const k = r.dataset.evopen; E.open.has(k) ? E.open.delete(k) : E.open.add(k); rerender('events'); });
+  $$('[data-evtool]').forEach(b => b.onclick = (ev) => { ev.stopPropagation(); EV_TOOLS[b.dataset.evtool][2](); });
+  $$('[data-evsearch]').forEach(b => b.onclick = (ev) => { ev.stopPropagation(); api.openUrl(b.dataset.evsearch); });
+  const q = $('#ev-q');
+  if (q) q.oninput = () => { E.q = q.value; clearTimeout(E.t); E.t = setTimeout(() => { rerender('events'); const n = $('#ev-q'); if (n) { n.focus(); n.setSelectionRange(n.value.length, n.value.length); } }, 250); };
+  const all = $('#ev-all'); if (all) all.onchange = () => { E.showAll = all.checked; rerender('events'); };
 };
 
 // ════════════════════ OUTILS DE TEST (tiers) ════════════════════
