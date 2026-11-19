@@ -16,3 +16,6 @@ Thumbs.db
 # Jeton de mise à jour (secret, jamais versionné)
 .update-token
 src/lib/update-token.json
+
+# Réglages locaux Claude Code
+.claude/settings.local.json

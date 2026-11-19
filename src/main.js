@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, shell, dialog, nativeTheme } = require('electron');
+const { app, BrowserWindow, ipcMain, shell, dialog, nativeTheme, screen, net } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const os = require('os');
@@ -21,7 +21,7 @@ const ASSETS = path.join(__dirname, 'renderer', 'assets');
 
 // ───────────────────────── Paramètres ─────────────────────────
 const SETTINGS_FILE = path.join(app.getPath('userData'), 'settings.json');
-const DEFAULTS = { theme: 'dark', tempLimit: 95, skipGpu: false, autoUpdate: true };
+const DEFAULTS = { theme: 'dark', tempLimit: 95, skipGpu: false, autoUpdate: true, overlay: true };
 let settings = { ...DEFAULTS };
 try { settings = { ...DEFAULTS, ...JSON.parse(fs.readFileSync(SETTINGS_FILE, 'utf8')) }; } catch {}
 const saveSettings = () => { try { fs.writeFileSync(SETTINGS_FILE, JSON.stringify(settings, null, 1)); } catch {} };
@@ -44,7 +44,7 @@ function createWindow() {
   });
   win.on('maximize', () => send('win:state', { maximized: true }));
   win.on('unmaximize', () => send('win:state', { maximized: false }));
-  win.on('closed', () => { monitor.stop(); diag.cancelDiag(); });
+  win.on('closed', () => { hideOverlay(); monitor.stop(); diag.cancelDiag(); });
   win.webContents.setWindowOpenHandler(({ url }) => { shell.openExternal(url); return { action: 'deny' }; });
   if (process.env.RGA_SNAP) snapshots(process.env.RGA_SNAP);
 }
@@ -59,6 +59,7 @@ function snapshots(dir) {
       await win.webContents.executeJavaScript(`${process.env.RGA_SNAP_THEME ? `applyTheme('${process.env.RGA_SNAP_THEME}');` : ''}go('${id}');${process.env.RGA_SNAP_JS || ''}`);
       await wait(+(process.env.RGA_SNAP_WAIT || 900));
       fs.writeFileSync(path.join(dir, `${id}.png`), (await win.webContents.capturePage()).toPNG());
+      if (overlayWin && !overlayWin.isDestroyed()) fs.writeFileSync(path.join(dir, `${id}-overlay.png`), (await overlayWin.webContents.capturePage()).toPNG());
     }
     app.quit();
   });
@@ -73,7 +74,7 @@ U.setSink({
   log: (msg, level = 'info') => send('log', { msg, level, t: Date.now() }),
   progress: (scope, pct, label) => send('progress', { scope, pct, label }),
   status: (scope, text, level = 'info') => send('status', { scope, text, level }),
-  send,
+  send: (ch, p) => { send(ch, p); if (ch === 'diag:tick') overlayTick(p); if (ch === 'diag:step' && p.label) overlayTick({ label: p.label, total: p.seconds || 0, elapsed: 0 }); },
 });
 
 function isAdmin() { try { execSync('net session', { stdio: 'ignore' }); return true; } catch { return false; } }
@@ -160,6 +161,66 @@ ipcMain.handle('update:install', () => {
 });
 ipcMain.handle('update:info', () => ({ repo: updater.repo, mode: updater.mode(), version: app.getVersion() }));
 
+// ───────────────────────── Overlay ─────────────────────────
+let overlayWin = null, offOverlay = null, overlayManual = false;
+function showOverlay() {
+  if (!overlayWin || overlayWin.isDestroyed()) {
+    const { workArea } = screen.getPrimaryDisplay();
+    const W = 262, H = 222;
+    overlayWin = new BrowserWindow({
+      width: W, height: H, x: workArea.x + workArea.width - W - 12, y: workArea.y + 12,
+      frame: false, transparent: true, resizable: false, movable: false, focusable: false, skipTaskbar: true, hasShadow: false,
+      alwaysOnTop: true, show: false, backgroundColor: '#00000000',
+      webPreferences: { preload: path.join(__dirname, 'overlay', 'preload.js'), contextIsolation: true, sandbox: true, backgroundThrottling: false },
+    });
+    overlayWin.setAlwaysOnTop(true, 'screen-saver');
+    overlayWin.setIgnoreMouseEvents(true);
+    overlayWin.loadFile(path.join(__dirname, 'overlay', 'overlay.html'));
+    overlayWin.once('ready-to-show', () => overlayWin.showInactive());
+    overlayWin.on('closed', () => { overlayWin = null; });
+  } else overlayWin.showInactive();
+  if (!offOverlay) offOverlay = monitor.on((s) => { if (overlayWin && !overlayWin.isDestroyed()) overlayWin.webContents.send('ov:sample', s); });
+  send('overlay:state', true);
+}
+function hideOverlay() {
+  if (offOverlay) { offOverlay(); offOverlay = null; }
+  if (overlayWin && !overlayWin.isDestroyed()) overlayWin.destroy();
+  overlayWin = null;
+  if (!monitor.listeners.size) monitor.stop();
+  send('overlay:state', false);
+}
+function overlayTick(t) { if (overlayWin && !overlayWin.isDestroyed()) overlayWin.webContents.send('ov:tick', t); }
+
+ipcMain.handle('overlay:toggle', (_e, on) => { overlayManual = !!on; if (on) { showOverlay(); overlayTick({ label: 'Monitoring' }); } else hideOverlay(); return !!on; });
+
+// Pilote de capteurs PawnIO (requis par LibreHardwareMonitor pour la température du processeur).
+async function pawnioStatus() {
+  const r = await run('sc query PawnIO');
+  if (/RUNNING/i.test(r.out)) return 'running';
+  if (/SERVICE_NAME|NOM_SERVICE/i.test(r.out)) return 'stopped';
+  return 'missing';
+}
+ipcMain.handle('sensors:status', async () => ({ admin: isAdmin(), pawnio: await pawnioStatus(), last: monitor.last ? { cpuTemp: monitor.last.cpuTemp, cpuTempSrc: monitor.last.cpuTempSrc, gpuTemp: monitor.last.gpuTemp } : null }));
+ipcMain.handle('sensors:installPawnIO', async () => {
+  try {
+    log('Recherche de la dernière version de PawnIO…');
+    const res = await net.fetch('https://api.github.com/repos/namazso/PawnIO.Setup/releases/latest', { headers: { 'User-Agent': 'RGA-Tools', Accept: 'application/vnd.github+json' } });
+    if (!res.ok) throw new Error(`GitHub a répondu ${res.status}`);
+    const rel = await res.json();
+    const asset = (rel.assets || []).find(a => /PawnIO_setup\.exe$/i.test(a.name));
+    if (!asset) throw new Error('Installeur PawnIO introuvable dans la dernière version');
+    const file = tmpFile('PawnIO_setup.exe');
+    log(`Téléchargement de PawnIO ${rel.tag_name}…`);
+    await download(asset.browser_download_url, file, (pct) => progress('global', pct, 'Téléchargement de PawnIO'));
+    progress('global', 100, 'PawnIO téléchargé');
+    log("Installeur PawnIO lancé : suivez l'assistant, puis redémarrez RGA Tools.", 'success');
+    launch(file);
+    return true;
+  } catch (e) { log(`PawnIO : ${e.message}`, 'error'); return false; }
+});
+
+
+
 // ───────────────────────── Diagnostic / monitoring / config ─────────────────────────
 let offLive = null;
 ipcMain.handle('monitor:start', () => { if (!offLive) offLive = monitor.on((s) => send('monitor:sample', s)); return monitor.history.slice(-120); });
@@ -175,7 +236,13 @@ ipcMain.handle('config:get', async () => {
 ipcMain.handle('diag:profiles', () => Object.fromEntries(Object.entries(diag.PROFILES).map(([k, p]) => [k, { ...p, seconds: diag.stepEstimate(p.steps) }])));
 ipcMain.handle('diag:run', async (_e, { profile, note }) => {
   try {
-    const R = await diag.runDiag(profile, { note, tempLimit: settings.tempLimit, skipGpu: settings.skipGpu, version: app.getVersion() });
+    const stress = profile !== 'config';
+    if (stress && settings.overlay) showOverlay();
+    let R;
+    try { R = await diag.runDiag(profile, { note, tempLimit: settings.tempLimit, skipGpu: settings.skipGpu, version: app.getVersion() }); }
+    finally {
+      if (stress && settings.overlay && !overlayManual) hideOverlay();
+    }
     if (!R) return null;
     R.reportFile = report.save(R, path.join(ASSETS, 'logo-rga.png'));
     log(`Rapport enregistré : ${R.reportFile}`, 'success');

@@ -9,7 +9,7 @@
 </p>
 
 <p align="center">
-  <img alt="Version" src="https://img.shields.io/badge/version-3.3.0-c31a24" />
+  <img alt="Version" src="https://img.shields.io/badge/version-3.4.0-c31a24" />
   <img alt="Plateforme" src="https://img.shields.io/badge/plateforme-Windows%2010%20%2F%2011-555" />
   <img alt="Electron" src="https://img.shields.io/badge/Electron-33-47848f" />
   <a href="https://github.com/max69rga/rga-tools/actions/workflows/release.yml"><img alt="Build" src="https://github.com/max69rga/rga-tools/actions/workflows/release.yml/badge.svg" /></a>
@@ -22,7 +22,7 @@
 | Domaine | Contenu |
 |---|---|
 | **Diagnostic PC** | 4 profils (export config, rapide, long, extrême) : stress CPU / GPU / RAM, débit disques, analyse des journaux, note sur 100, rapport HTML local |
-| **Monitoring** | CPU, fréquence, RAM, GPU, disques, réseau, température en temps réel |
+| **Monitoring** | CPU, fréquence, RAM, GPU, disques, réseau, températures CPU / GPU en temps réel, overlay au premier plan |
 | **Configuration PC** | Inventaire matériel et logiciel + santé du système sur 30 jours |
 | **Journaux Windows** | Lecture des journaux Système / Application / Defender, problèmes connus expliqués (écrans bleus décodés, disques, pilotes, mises à jour, réseau…) avec la marche à suivre, export CSV |
 | **Outils de test** | OCCT, HWiNFO, Cinebench, diagnostic mémoire Windows, CrystalDiskInfo, FurMark, Core Temp |
@@ -82,6 +82,7 @@ src/
 │  ├─ stress-worker.js  Thread de charge CPU / test mémoire
 │  └─ report.js         Rapport HTML
 ├─ gpu/                 Fenêtre du test 3D (WebGL2)
+├─ overlay/             Overlay températures / charge (toujours au premier plan)
 └─ renderer/            Interface (HTML / CSS / JS) et logos
 ```
 
@@ -104,11 +105,17 @@ Les exe sont compilés par **GitHub Actions** ([`.github/workflows/release.yml`]
 
 Pour tester un build sans rien publier : onglet **Actions → Build & Release → Run workflow** ; les exe sont téléchargeables dans les artefacts de l'exécution.
 
+## Températures
+
+Les températures sont lues par **LibreHardwareMonitorLib** (v0.9.6, licence MPL-2.0), embarquée dans `vendor/lhm` et copiée à côté de l'application (`resources/lhm`).
+
+- Carte graphique : sans prérequis (NVIDIA, AMD, Intel).
+- Processeur, VRM : droits administrateur (toujours le cas avec les exe) **et** pilote **PawnIO** installé sur le PC. RGA Tools affiche son statut et propose son installeur officiel dans **Paramètres**.
+
 ## Notes
 
-- Les températures ne sont disponibles que si le PC expose ses sondes à Windows (zones thermiques ACPI, fréquent sur portables). Sinon, utiliser HWiNFO depuis **Outils de test**.
 - Le score GPU provient d'un test WebGL maison : il sert à comparer un même PC dans le temps (détection de bridage thermique), pas à se comparer à d'autres benchmarks.
 
 ---
 
-© RGA Informatique.
+© RGA Informatique. Composants tiers : LibreHardwareMonitorLib (MPL-2.0, voir `vendor/lhm/LICENSE.txt`).

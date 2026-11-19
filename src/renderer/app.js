@@ -245,7 +245,7 @@ PAGES.diag = () => {
     <input class="input" id="diag-note" placeholder="Description du problème (facultatif) — ex. : écran noir en jeu, PC lent…" maxlength="300" />
     <button class="primary lg" id="diag-go">${ic('play')}Lancer le diagnostic</button>
   </div>
-  <div class="note">${ic('info')}<div>Fermez les applications ouvertes avant de lancer un test, et branchez les portables sur secteur. Pendant les tests GPU, une fenêtre 3D s'ouvre : c'est normal. Les températures ne sont relevées que si le PC expose ses sondes à Windows ; sinon, ouvrez HWiNFO en parallèle (onglet <b>Outils de test</b>).</div></div>
+  <div class="note">${ic('info')}<div>Fermez les applications ouvertes avant de lancer un test, et branchez les portables sur secteur. Pendant les tests GPU, une fenêtre 3D s'ouvre : c'est normal. Un overlay affiche températures et charge pendant les tests. Les températures sont lues par LibreHardwareMonitor ; celle du processeur nécessite le pilote de capteurs PawnIO (voir Paramètres).</div></div>
   ${S.reports.length ? `<h2 class="section">Rapports récents <span class="count">${S.reports.length}</span></h2>
   <div class="list">${S.reports.slice(0, 8).map((r, i) => `
     <div class="row clickable" data-report="${i}">
@@ -274,7 +274,8 @@ function diagRunning() {
         ${gauge('Fréquence', L.mhz, 'MHz')}
         ${gauge('GPU', L.gpu != null ? Math.round(L.gpu) : null, '%', L.gpu)}
         ${gauge('RAM', L.ram != null ? Math.round(L.ram) : null, '%', L.ram)}
-        ${gauge('Température', L.temp, '°C')}
+        ${gauge('Temp. CPU', L.cpuTemp, '°C')}
+        ${gauge('Temp. GPU', L.gpuTemp, '°C')}
       </div>
     </div>
   </div>`;
@@ -294,7 +295,7 @@ function diagResult(R) {
   const T = R.tests || {};
   const testRow = (k, t) => `<div class="row"><div class="grow"><b>${STEP_NAMES[k]}</b><div class="sub">${t.seconds} s${t.completed === false ? ' · interrompu' : ''}</div></div>
     <span class="tag">CPU ${t.sensors?.cpuAvg ?? '—'} %</span><span class="tag">${t.sensors?.mhzAvg ?? '—'} MHz</span>
-    ${t.sensors?.tempMax ? `<span class="tag">${t.sensors.tempMax} °C</span>` : ''}${t.cpuScore ? `<span class="tag">Score ${t.cpuScore.toLocaleString('fr-FR')}</span>` : ''}
+    ${t.sensors?.cpuTempMax ? `<span class="tag">CPU ${t.sensors.cpuTempMax} °C</span>` : ''}${t.sensors?.gpuTempMax ? `<span class="tag">GPU ${t.sensors.gpuTempMax} °C</span>` : ''}${t.cpuScore ? `<span class="tag">Score ${t.cpuScore.toLocaleString('fr-FR')}</span>` : ''}
     ${t.gpu?.score ? `<span class="tag">GPU ${t.gpu.score} passes/s</span>` : ''}${t.gpu?.error ? '<span class="tag err">Échec 3D</span>' : ''}${t.mem ? `<span class="tag ${t.mem.errors ? 'err' : 'ok'}">RAM ${t.mem.errors} err.</span>` : ''}</div>`;
   return head(`${esc(R.profileName)} terminé`, `${esc(R.inventory?.host || '')} · ${new Date(R.startedAt).toLocaleString('fr-FR')}`,
     `<button class="ghost" id="r-folder">${ic('folder')}Dossier</button><button class="ghost" id="r-new">${ic('refresh')}Nouveau diagnostic</button><button class="primary" id="r-open">${ic('external')}Ouvrir le rapport</button>`) + `
@@ -357,7 +358,7 @@ api.diag.onTick((t) => {
   const L = D.live || {};
   const set = (k, v, unit, pct) => { const el = document.querySelector(`[data-g="${k}"]`); if (!el) return; el.innerHTML = `${v ?? '—'}<small>${unit}</small>`; const b = el.parentElement.querySelector('.bar-fill'); if (b && pct != null) b.style.width = `${pct}%`; };
   set('CPU', L.cpu != null ? Math.round(L.cpu) : null, '%', L.cpu); set('Fréquence', L.mhz, 'MHz'); set('GPU', L.gpu != null ? Math.round(L.gpu) : null, '%', L.gpu);
-  set('RAM', L.ram != null ? Math.round(L.ram) : null, '%', L.ram); set('Température', L.temp, '°C');
+  set('RAM', L.ram != null ? Math.round(L.ram) : null, '%', L.ram); set('Temp. CPU', L.cpuTemp, '°C'); set('Temp. GPU', L.gpuTemp, '°C');
 });
 
 // ════════════════════ MONITORING ════════════════════
@@ -368,10 +369,11 @@ const MON = [
   { k: 'gpu', label: 'Carte graphique', icon: 'gpu', unit: '%', max: 100, sub: () => 'Moteur le plus chargé' },
   { k: 'disk', label: 'Disques', icon: 'disk', unit: '', max: null, val: (s) => (s.diskR || 0) + (s.diskW || 0), fmt: fmtBytes, sub: (s) => `Lecture ${fmtBytes(s.diskR)} · Écriture ${fmtBytes(s.diskW)}` },
   { k: 'net', label: 'Réseau', icon: 'net', unit: '', max: null, val: (s) => (s.rx || 0) + (s.tx || 0), fmt: fmtBytes, sub: (s) => `↓ ${fmtBytes(s.rx)} · ↑ ${fmtBytes(s.tx)}` },
-  { k: 'temp', label: 'Température', icon: 'temp', unit: '°C', max: 110, sub: (s) => s.temp == null ? 'Sonde non exposée à Windows' : 'Zone thermique ACPI' },
+  { k: 'cpuTemp', label: 'Température CPU', icon: 'temp', unit: '°C', max: 110, sub: (s) => s.cpuTemp == null ? sensorHint() : `${s.cpuTempSrc === 'lhm' ? 'Capteur du processeur' : 'Zone thermique ACPI'}${s.cpuPower != null ? ` · ${Math.round(s.cpuPower)} W` : ''}${s.vrmTemp != null ? ` · VRM ${Math.round(s.vrmTemp)} °C` : ''}` },
+  { k: 'gpuTemp', label: 'Température GPU', icon: 'temp', unit: '°C', max: 110, sub: (s) => s.gpuTemp == null ? 'Non disponible' : [s.gpuHotspot != null ? `Point chaud ${Math.round(s.gpuHotspot)} °C` : '', s.gpuPower != null ? `${Math.round(s.gpuPower)} W` : ''].filter(Boolean).join(' · ') || 'Pilote graphique' },
 ];
 PAGES.monitor = () => head('Monitoring', 'Charge, fréquences et débits en temps réel (rafraîchi toutes les ~1,5 s, 2 dernières minutes affichées).',
-  `<button class="ghost" id="mon-hw">${ic('external')}HWiNFO (sondes détaillées)</button><button class="${S.mon.on ? 'danger' : 'primary'}" id="mon-toggle">${ic(S.mon.on ? 'stop' : 'play')}${S.mon.on ? 'Arrêter' : 'Démarrer'}</button>`) + `
+  `${S.sens?.pawnio && S.sens.pawnio !== 'running' ? `<button class="ghost" id="mon-hw" data-busy>${ic('temp')}Installer le pilote de capteurs</button>` : ''}<button class="ghost" id="mon-ov">${ic('monitor')}${S.overlayOn ? 'Masquer l’overlay' : 'Afficher l’overlay'}</button><button class="${S.mon.on ? 'danger' : 'primary'}" id="mon-toggle">${ic(S.mon.on ? 'stop' : 'play')}${S.mon.on ? 'Arrêter' : 'Démarrer'}</button>`) + `
   <div class="mon">${MON.map(m => `
     <div class="card mon-card">
       <div class="h"><div class="k">${ic(m.icon)}${m.label}</div><div class="v" id="mv-${m.k}">—</div></div>
@@ -381,7 +383,8 @@ PAGES.monitor = () => head('Monitoring', 'Charge, fréquences et débits en temp
   </div>`;
 BIND.monitor = () => {
   $('#mon-toggle').onclick = () => (S.mon.on ? stopMonitor() : startMonitor());
-  $('#mon-hw').onclick = () => api.openUrl('https://www.hwinfo.com/download/');
+  $('#mon-hw') && ($('#mon-hw').onclick = installPawnIO);
+  $('#mon-ov').onclick = async () => { S.overlayOn = await api.overlay.toggle(!S.overlayOn); rerender('monitor'); };
   if (!S.mon.on) startMonitor(); else drawMonitor();
 };
 let offSample = null;
@@ -424,6 +427,17 @@ function drawMonitor() {
     x.beginPath(); x.moveTo(P[0][0], h); P.forEach(([a, b]) => x.lineTo(a, b)); x.lineTo(P[P.length - 1][0], h); x.closePath(); x.fillStyle = g; x.fill();
     x.beginPath(); P.forEach(([a, b], i) => (i ? x.lineTo(a, b) : x.moveTo(a, b))); x.strokeStyle = red; x.lineWidth = 1.8; x.lineJoin = 'round'; x.stroke();
   }
+}
+
+function sensorHint() {
+  if (!S.sys?.admin) return 'Droits administrateur requis';
+  if (S.sens?.pawnio && S.sens.pawnio !== 'running') return 'Pilote de capteurs PawnIO requis';
+  return 'Capteur non disponible sur ce PC';
+}
+async function installPawnIO() {
+  if (!(await confirmBox('Pilote de capteurs PawnIO', 'RGA Tools va télécharger l’installeur officiel de PawnIO (GitHub, pilote signé et open source) et le lancer.\n\nSuivez l’assistant, puis relancez RGA Tools pour afficher la température du processeur.', 'Télécharger et installer'))) return;
+  setBusy(true); showConsole();
+  try { await api.sensors.installPawnIO(); } finally { setBusy(false); setGlobal(0, 'Prêt'); }
 }
 
 // ════════════════════ CONFIGURATION ════════════════════
@@ -813,8 +827,12 @@ PAGES.settings = () => {
   <div class="list">
     <div class="row"><div class="tool-ic">${ic(st.theme === 'light' ? 'sun' : 'moon')}</div><div class="grow"><b>Thème</b><div class="sub">Apparence de l'application.</div></div>
       <div class="seg" id="set-theme"><button data-v="dark" class="${st.theme === 'dark' ? 'on' : ''}">Sombre</button><button data-v="light" class="${st.theme === 'light' ? 'on' : ''}">Clair</button></div></div>
-    <div class="row"><div class="tool-ic">${ic('temp')}</div><div class="grow"><b>Limite de température</b><div class="sub">Interrompt les tests de charge si une sonde dépasse cette valeur (si les sondes sont exposées à Windows).</div></div>
+    <div class="row"><div class="tool-ic">${ic('temp')}</div><div class="grow"><b>Limite de température</b><div class="sub">Interrompt les tests de charge si la température du processeur ou de la carte graphique dépasse cette valeur.</div></div>
       <select class="input" id="set-temp" style="width:120px">${[80, 85, 90, 95, 100].map(t => `<option value="${t}" ${st.tempLimit === t ? 'selected' : ''}>${t} °C</option>`).join('')}<option value="0" ${!st.tempLimit ? 'selected' : ''}>Désactivée</option></select></div>
+    <div class="row"><div class="tool-ic">${ic('monitor')}</div><div class="grow"><b>Overlay pendant les tests</b><div class="sub">Affiche températures et charge en haut à droite de l'écran, au-dessus de toutes les fenêtres, pendant les tests de charge.</div></div>
+      <label class="switch"><input type="checkbox" id="set-ov" ${st.overlay !== false ? 'checked' : ''}><span></span></label></div>
+    <div class="row"><div class="tool-ic">${ic('temp')}</div><div class="grow"><b>Pilote de capteurs (PawnIO)</b><div class="sub">Pilote signé et open source utilisé par LibreHardwareMonitor pour lire la température et la consommation du processeur. À installer une fois par PC.</div></div>
+      ${!S.sens ? '' : S.sens.pawnio === 'running' ? '<span class="tag ok">Installé</span>' : `<span class="tag warn">${S.sens.pawnio === 'stopped' ? 'Arrêté' : 'Absent'}</span><button class="primary sm" id="set-pawnio" data-busy>${ic('download')}Installer</button>`}</div>
     <div class="row"><div class="tool-ic">${ic('gpu')}</div><div class="grow"><b>Ignorer le test 3D</b><div class="sub">Utile sur les PC sans carte graphique compatible ou en bureau à distance.</div></div>
       <label class="switch"><input type="checkbox" id="set-gpu" ${st.skipGpu ? 'checked' : ''}><span></span></label></div>
     <div class="row"><div class="tool-ic">${ic('cloud')}</div><div class="grow"><b>Vérifier les mises à jour au démarrage</b><div class="sub">Propose automatiquement les nouvelles versions publiées sur GitHub.</div></div>
@@ -835,6 +853,8 @@ BIND.settings = () => {
   $('#set-theme').onclick = async (e) => { const b = e.target.closest('button'); if (!b) return; await save({ theme: b.dataset.v }); applyTheme(b.dataset.v); render(); };
   $('#set-temp').onchange = (e) => save({ tempLimit: +e.target.value });
   $('#set-gpu').onchange = (e) => save({ skipGpu: e.target.checked });
+  $('#set-ov').onchange = (e) => save({ overlay: e.target.checked });
+  $('#set-pawnio') && ($('#set-pawnio').onclick = installPawnIO);
   $('#set-upd').onchange = (e) => save({ autoUpdate: e.target.checked });
   bindUpdate();
   $('#set-reports').onclick = async () => { const r = S.reports[0]; if (r) api.openPath(r.file.replace(/[\\/][^\\/]+$/, '')); else toast('Aucun rapport pour le moment.', 'info'); };
@@ -888,6 +908,7 @@ function bindUpdate() {
     const r = await api.update.install(); if (r.error) toast(r.error, 'error');
   });
 }
+api.overlay.onState((on) => { S.overlayOn = on; if (S.page === 'monitor') { const b = $('#mon-ov'); if (b) b.innerHTML = `${ic('monitor')}${on ? 'Masquer l’overlay' : 'Afficher l’overlay'}`; } });
 api.update.onAvailable((r) => { S.upd.data = r; S.upd.state = 'available'; refreshUpdate(); toast(`Version ${r.version} de RGA Tools disponible.`, 'info'); });
 api.update.onProgress((p) => { S.upd.pct = p; const bar = $('#upd-card .big-bar i'); if (bar) bar.style.width = `${Math.max(0, p)}%`; const b = $('#upd-card .desc b'); if (b) b.textContent = p >= 0 ? `${p} %` : ''; });
 
@@ -900,6 +921,7 @@ api.update.onProgress((p) => { S.upd.pct = p; const bar = $('#upd-card .big-bar 
   $('#console-clear').onclick = () => { $('#console-body').innerHTML = ''; logCount = 0; $('#console-count').textContent = 0; setGlobal(0, 'Prêt'); };
 
   [S.cat, S.sys, S.settings, S.profiles, S.reports, S.upd.info] = await Promise.all([api.catalog(), api.sysInfo(), api.settings.get(), api.diag.profiles(), api.reports.list(), api.update.info()]);
+  api.sensors.status().then((st) => { S.sens = st; if (['monitor', 'settings'].includes(S.page)) rerender(S.page); });
   applyTheme(S.settings.theme);
   $('#btn-theme').onclick = async () => { const t = S.settings.theme === 'light' ? 'dark' : 'light'; S.settings = await api.settings.set({ theme: t }); applyTheme(t); if (S.page === 'monitor') drawMonitor(); if (S.page === 'settings') render(); };
   S.cat.PROGRAMS.filter(p => p.group === 'essentiels').forEach(p => S.soft.add(p.id));

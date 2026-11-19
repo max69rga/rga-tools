@@ -1,0 +1,47 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8" />
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'" />
+<title>RGA Tools — Overlay</title>
+<style>
+  html, body { margin: 0; background: transparent; overflow: hidden; font: 12px/1.35 "Segoe UI Variable Text", "Segoe UI", sans-serif; color: #f2f2f3; user-select: none; }
+  .ov { margin: 6px; background: rgba(14, 15, 17, .86); border: 1px solid rgba(255, 255, 255, .09); border-left: 3px solid #d0202b; border-radius: 12px; padding: 10px 12px 10px; box-shadow: 0 10px 30px -10px rgba(0, 0, 0, .8); backdrop-filter: blur(6px); }
+  .hd { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+  .hd img { width: 18px; height: 18px; border-radius: 4px; }
+  .hd .lbl { flex: 1; font-weight: 600; font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .hd .tm { color: #9a9ca3; font-variant-numeric: tabular-nums; }
+  .bar { height: 3px; background: rgba(255, 255, 255, .1); border-radius: 3px; overflow: hidden; margin-bottom: 8px; }
+  .bar i { display: block; height: 100%; width: 0; background: linear-gradient(90deg, #e2343e, #ff8a3c); transition: width .4s; }
+  .temps { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-bottom: 6px; }
+  .t { background: rgba(255, 255, 255, .05); border-radius: 8px; padding: 5px 8px; }
+  .t .k { color: #9a9ca3; font-size: 10.5px; font-weight: 700; letter-spacing: .5px; }
+  .t .v { font-size: 22px; font-weight: 700; font-variant-numeric: tabular-nums; line-height: 1.1; }
+  .t .v small { font-size: 12px; color: #9a9ca3; font-weight: 500; margin-left: 1px; }
+  .t .s { color: #9a9ca3; font-size: 10.5px; min-height: 13px; }
+  .ok { color: #3fd68a; } .warm { color: #f5a524; } .hot { color: #ff5c63; }
+  .rows { display: grid; grid-template-columns: auto 1fr auto; gap: 2px 8px; font-variant-numeric: tabular-nums; }
+  .rows .k { color: #9a9ca3; } .rows .v { text-align: right; font-weight: 600; }
+  .mini { height: 4px; align-self: center; background: rgba(255, 255, 255, .08); border-radius: 4px; overflow: hidden; }
+  .mini i { display: block; height: 100%; background: #d0202b; }
+  .hint { margin-top: 6px; color: #8a8c93; font-size: 10.5px; }
+</style>
+</head>
+<body>
+<div class="ov">
+  <div class="hd"><img src="../renderer/assets/icon.png" alt="" /><div class="lbl" id="lbl">Monitoring</div><div class="tm" id="tm"></div></div>
+  <div class="bar" id="barw" hidden><i id="bar"></i></div>
+  <div class="temps">
+    <div class="t"><div class="k">CPU</div><div class="v" id="ct">—</div><div class="s" id="cs"></div></div>
+    <div class="t"><div class="k">GPU</div><div class="v" id="gt">—</div><div class="s" id="gs"></div></div>
+  </div>
+  <div class="rows">
+    <span class="k">CPU</span><span class="mini"><i id="cpub"></i></span><span class="v" id="cpu">—</span>
+    <span class="k">GPU</span><span class="mini"><i id="gpub"></i></span><span class="v" id="gpu">—</span>
+    <span class="k">RAM</span><span class="mini"><i id="ramb"></i></span><span class="v" id="ram">—</span>
+  </div>
+  <div class="hint" id="hint" hidden></div>
+</div>
+<script src="overlay.js"></script>
+</body>
+</html>

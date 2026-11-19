@@ -2,6 +2,18 @@
 
 Format inspiré de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/), versions selon [SemVer](https://semver.org/lang/fr/).
 
+## [3.4.0] — 2026-11-20
+
+### Ajouté
+- **Températures intégrées** grâce à [LibreHardwareMonitor](https://github.com/LibreHardwareMonitor/LibreHardwareMonitor) (v0.9.6, MPL-2.0), embarqué dans l'application : processeur (Tctl/Tdie, package), carte graphique (cœur, point chaud), SSD, consommation CPU / GPU, VRM quand la carte mère les nomme. Aucun logiciel tiers à installer ou à lancer.
+  - Température GPU NVIDIA aussi lue via le pilote (`nvidia-smi`) en secours.
+  - Température processeur : droits administrateur + pilote **PawnIO** (signé, open source). Statut et installation en un clic dans **Paramètres**.
+- **Overlay** toujours au premier plan (en haut à droite) pendant les tests de charge : températures CPU / GPU, point chaud, consommation, charge CPU / GPU / RAM, progression du test. Activable aussi depuis **Monitoring** ; désactivable dans **Paramètres**.
+- Monitoring : cartes Température CPU et Température GPU.
+
+### Modifié
+- Diagnostic PC et rapport : températures CPU et GPU séparées (max, point chaud, puissances, courbes), seuils propres à chaque composant, garde-fou de température sur le plus chaud des deux.
+
 ## [3.3.0] — 2026-11-19
 
 ### Ajouté

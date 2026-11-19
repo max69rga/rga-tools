@@ -32,7 +32,9 @@ function render(R, logoDataUri) {
         <div><small>CPU moy.</small>${v(t.sensors?.cpuAvg, ' %')}</div>
         <div><small>Fréquence moy.</small>${v(t.sensors?.mhzAvg, ' MHz')}</div>
         <div><small>GPU moy.</small>${v(t.sensors?.gpuAvg, ' %')}</div>
-        <div><small>Temp. max</small>${v(t.sensors?.tempMax, ' °C')}</div>
+        <div><small>Temp. CPU max</small>${v(t.sensors?.cpuTempMax, ' °C')}</div>
+        <div><small>Temp. GPU max</small>${v(t.sensors?.gpuTempMax, ' °C')}${t.sensors?.hotspotMax ? ` <span class="mut">(point chaud ${t.sensors.hotspotMax} °C)</span>` : ''}</div>
+        ${t.sensors?.cpuPowerMax || t.sensors?.gpuPowerMax ? `<div><small>Puissance max CPU / GPU</small>${v(t.sensors?.cpuPowerMax, ' W')} / ${v(t.sensors?.gpuPowerMax, ' W')}</div>` : ''}
         ${t.cpuScore ? `<div><small>Score CPU</small>${t.cpuScore.toLocaleString('fr-FR')}</div>` : ''}
         ${t.gpu?.score ? `<div><small>Score GPU</small>${t.gpu.score} passes/s <span class="mut">(${t.gpu.fpsAvg} FPS)</span></div>` : ''}
         ${t.mem ? `<div><small>Erreurs RAM</small>${t.mem.errors} <span class="mut">(${t.mem.gbChecked} Go)</span></div>` : ''}
@@ -41,7 +43,8 @@ function render(R, logoDataUri) {
         <div><small>CPU %</small>${spark(t.series || [], 'cpu', '#d0202b', 100)}</div>
         <div><small>Fréquence</small>${spark(t.series || [], 'mhz', '#f5a524')}</div>
         ${(t.series || []).some(s => s.gpu > 0) ? `<div><small>GPU %</small>${spark(t.series, 'gpu', '#3b9eff', 100)}</div>` : ''}
-        ${(t.series || []).some(s => s.temp) ? `<div><small>Temp. °C</small>${spark(t.series, 'temp', '#e5484d')}</div>` : ''}
+        ${(t.series || []).some(s => s.cpuTemp) ? `<div><small>Temp. CPU °C</small>${spark(t.series, 'cpuTemp', '#e5484d', 110)}</div>` : ''}
+        ${(t.series || []).some(s => s.gpuTemp) ? `<div><small>Temp. GPU °C</small>${spark(t.series, 'gpuTemp', '#8e4ec6', 110)}</div>` : ''}
       </div>
     </div>`).join('');
 

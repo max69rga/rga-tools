@@ -79,6 +79,9 @@ function sampleStats(samples) {
   return {
     cpuAvg: r1(avg(pick('cpu'))), mhzAvg: Math.round(avg(pick('mhz')) || 0) || null, mhzMin: min(pick('mhz')), mhzMax: max(pick('mhz')),
     gpuAvg: r1(avg(pick('gpu'))), tempAvg: r1(avg(pick('temp'))), tempMax: max(pick('temp')), ramAvg: r1(avg(pick('ram'))), n: samples.length,
+    cpuTempAvg: r1(avg(pick('cpuTemp'))), cpuTempMax: max(pick('cpuTemp')), gpuTempAvg: r1(avg(pick('gpuTemp'))), gpuTempMax: max(pick('gpuTemp')),
+    hotspotMax: max(pick('gpuHotspot')), vrmMax: max(pick('vrmTemp')), cpuPowerMax: max(pick('cpuPower')), gpuPowerMax: max(pick('gpuPower')),
+    tempSource: samples.some(x => x.cpuTempSrc === 'lhm') ? 'lhm' : samples.some(x => x.cpuTempSrc === 'acpi') ? 'acpi' : samples.some(x => x.gpuTemp != null) ? 'gpu' : null,
   };
 }
 
@@ -120,7 +123,7 @@ async function stressPhase(kind, seconds, ctx) {
     var ms = mem ? await mem.stop() : null;
   }
   const samples = rec.stop();
-  const out = { kind, seconds, completed: ok, sensors: sampleStats(samples), series: samples.map(s => ({ cpu: s.cpu, mhz: s.mhz, gpu: s.gpu, temp: s.temp })) };
+  const out = { kind, seconds, completed: ok, sensors: sampleStats(samples), series: samples.map(s => ({ cpu: s.cpu, mhz: s.mhz, gpu: s.gpu, temp: s.temp, cpuTemp: s.cpuTemp, gpuTemp: s.gpuTemp })) };
   // Score = milliers d'opérations par seconde, tous threads confondus.
   if (cs) { out.cpuScore = Math.round(cs.ops / (seconds * 1000)); out.cpuCrashed = cs.crashed; }
   if (gs) {
@@ -186,10 +189,16 @@ function analyse(R) {
   if (cpuN?.sensors?.mhzAvg && base && cpuN.sensors.mhzAvg < base * 0.85) add('warn', 'Processeur', 'Fréquence sous charge inférieure à la fréquence de base', `Moyenne ${cpuN.sensors.mhzAvg} MHz pour ${base} MHz de base : bridage thermique ou d'alimentation probable (refroidissement, pâte thermique, mode économie).`);
   else if (cpuN?.sensors?.mhzAvg) add('ok', 'Processeur', 'Fréquence sous charge correcte', `Moyenne ${cpuN.sensors.mhzAvg} MHz (base ${base} MHz).`);
   if (tests.cpuN?.cpuCrashed || tests.cpu1?.cpuCrashed) add('error', 'Processeur', 'Un thread de calcul a planté pendant le test');
-  const tMax = Math.max(...Object.values(tests).map(t => t?.sensors?.tempMax || 0));
-  if (tMax >= 95) add('error', 'Températures', `Température maximale ${tMax} °C`, 'Surchauffe : vérifier ventilateurs, poussière et pâte thermique.');
-  else if (tMax >= 85) add('warn', 'Températures', `Température maximale ${tMax} °C`, 'Élevée : un nettoyage du refroidissement est conseillé.');
-  else if (tMax > 0) add('ok', 'Températures', `Température maximale ${tMax} °C`);
+  const mx = (k) => Math.max(0, ...Object.values(tests).map(t => t?.sensors?.[k] || 0));
+  const cT = mx('cpuTempMax'), gT = mx('gpuTempMax'), hT = mx('hotspotMax'), vT = mx('vrmMax');
+  if (cT >= 95) add('error', 'Températures', `Processeur à ${cT} °C sous charge`, 'Surchauffe du processeur : vérifier le ventirad, la poussière et la pâte thermique.');
+  else if (cT >= 85) add('warn', 'Températures', `Processeur à ${cT} °C sous charge`, 'Température élevée : un nettoyage du refroidissement est conseillé.');
+  else if (cT > 0) add('ok', 'Températures', `Processeur : ${cT} °C maximum sous charge`);
+  if (gT >= 90 || hT >= 105) add('error', 'Températures', `Carte graphique à ${gT} °C${hT ? ` (point chaud ${hT} °C)` : ''}`, 'Surchauffe GPU : nettoyer les ventilateurs, vérifier le flux d’air du boîtier, éventuellement repâter la carte.');
+  else if (gT >= 83 || hT >= 95) add('warn', 'Températures', `Carte graphique à ${gT} °C${hT ? ` (point chaud ${hT} °C)` : ''}`, 'Température GPU élevée : améliorer le flux d’air.');
+  else if (gT > 0) add('ok', 'Températures', `Carte graphique : ${gT} °C maximum sous charge`);
+  if (vT >= 105) add('warn', 'Températures', `Étage d'alimentation (VRM) à ${vT} °C`, 'Les VRM de la carte mère chauffent : vérifier la ventilation autour du processeur.');
+  if (!cT && Object.values(tests).some(t => t.kind !== 'idle')) add('info', 'Températures', 'Température du processeur non mesurée', 'Installez le pilote de capteurs PawnIO (Paramètres) et lancez RGA Tools en administrateur pour relever la température du processeur.');
   if (R.tempAbort) add('error', 'Températures', `Test interrompu à ${R.tempAbort} °C (limite de sécurité)`);
 
   // GPU
@@ -289,7 +298,7 @@ async function runDiag(profileId, opts = {}) {
           log(`   Journaux : ${ev.summary}`, ev.problems.some(p => p.sev === 'error') ? 'warn' : 'dim');
         } catch (e) { log(`   Journaux illisibles : ${e.message}`, 'warn'); }
       }
-      else if (k === 'idle') { const rec = monitor.record(); await hold(+d, ctx, STEP_LABEL.idle); const s = rec.stop(); R.tests.idle = { kind: 'idle', seconds: +d, sensors: sampleStats(s), series: s.map(x => ({ cpu: x.cpu, mhz: x.mhz, gpu: x.gpu, temp: x.temp })) };
+      else if (k === 'idle') { const rec = monitor.record(); await hold(+d, ctx, STEP_LABEL.idle); const s = rec.stop(); R.tests.idle = { kind: 'idle', seconds: +d, sensors: sampleStats(s), series: s.map(x => ({ cpu: x.cpu, mhz: x.mhz, gpu: x.gpu, temp: x.temp, cpuTemp: x.cpuTemp, gpuTemp: x.gpuTemp })) };
         if (R.tests.idle.sensors.cpuAvg > 15) log(`   Processeur utilisé à ${R.tests.idle.sensors.cpuAvg} % au repos : les résultats peuvent être faussés.`, 'warn'); }
       else if (k === 'disk') R.disk = await diskPhase();
       else {

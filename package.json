@@ -1,7 +1,7 @@
 {
   "name": "rga-tools",
   "productName": "RGA Tools",
-  "version": "3.3.0",
+  "version": "3.4.0",
   "private": true,
   "description": "RGA Informatique — boîte à outils technicien : diagnostic, monitoring, installation, nettoyage, réparation.",
   "main": "src/main.js",
@@ -47,6 +47,12 @@
     },
     "asarUnpack": [
       "src/lib/stress-worker.js"
+    ],
+    "extraResources": [
+      {
+        "from": "vendor/lhm",
+        "to": "lhm"
+      }
     ]
   },
   "devDependencies": {
