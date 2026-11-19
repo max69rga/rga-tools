@@ -8,7 +8,7 @@ const root = path.join(__dirname, '..');
 const pkg = require('../package.json');
 const v = pkg.version, tag = `v${v}`;
 const GH = fs.existsSync('C:\\Program Files\\GitHub CLI\\gh.exe') ? 'C:\\Program Files\\GitHub CLI\\gh.exe' : 'gh';
-const sh = (cmd, args, opts = {}) => execFileSync(cmd, args, { cwd: root, encoding: 'utf8', stdio: ['ignore', 'pipe', 'inherit'], ...opts }).trim();
+const sh = (cmd, args, opts = {}) => (execFileSync(cmd, args, { cwd: root, encoding: 'utf8', stdio: ['ignore', 'pipe', 'inherit'], ...opts }) || '').trim();
 
 const files = [`RGA-Tools-${v}-portable.exe`, `RGA-Tools-${v}-setup.exe`].map(f => path.join(root, 'dist', f));
 for (const f of files) if (!fs.existsSync(f)) { console.error(`Manquant : ${f} — lancez d'abord npm run dist`); process.exit(1); }
