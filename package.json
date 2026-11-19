@@ -1,0 +1,55 @@
+{
+  "name": "rga-tools",
+  "productName": "RGA Tools",
+  "version": "3.0.0",
+  "private": true,
+  "description": "RGA Informatique — boîte à outils technicien : diagnostic, monitoring, installation, nettoyage, réparation.",
+  "main": "src/main.js",
+  "author": "RGA Informatique",
+  "license": "UNLICENSED",
+  "scripts": {
+    "start": "electron .",
+    "icons": "electron scripts/make-icon.js",
+    "dist": "electron-builder --win portable nsis --x64"
+  },
+  "build": {
+    "appId": "rga.tools",
+    "productName": "RGA Tools",
+    "copyright": "RGA Informatique",
+    "directories": {
+      "output": "dist",
+      "buildResources": "build"
+    },
+    "files": [
+      "src/**/*",
+      "package.json"
+    ],
+    "win": {
+      "icon": "build/icon.ico",
+      "requestedExecutionLevel": "requireAdministrator",
+      "signAndEditExecutable": true
+    },
+    "portable": {
+      "artifactName": "RGA-Tools-${version}-portable.exe",
+      "requestExecutionLevel": "admin"
+    },
+    "nsis": {
+      "artifactName": "RGA-Tools-${version}-setup.exe",
+      "oneClick": false,
+      "perMachine": true,
+      "allowToChangeInstallationDirectory": true,
+      "installerIcon": "build/icon.ico",
+      "uninstallerIcon": "build/icon.ico",
+      "shortcutName": "RGA Tools",
+      "runAfterFinish": true
+    },
+    "asarUnpack": [
+      "src/lib/stress-worker.js"
+    ]
+  },
+  "devDependencies": {
+    "electron": "33.2.1",
+    "electron-builder": "25.1.8",
+    "png-to-ico": "2.1.8"
+  }
+}

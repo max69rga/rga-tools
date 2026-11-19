@@ -1,0 +1,19 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8" />
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'" />
+<title>RGA Tools — Test GPU</title>
+<style>
+  html, body { margin: 0; height: 100%; background: #000; overflow: hidden; font: 13px "Segoe UI", sans-serif; color: #fff; }
+  canvas { width: 100%; height: 100%; display: block; }
+  .hud { position: fixed; left: 12px; top: 10px; background: rgba(0,0,0,.55); padding: 6px 10px; border-radius: 6px; border-left: 3px solid #d0202b; }
+  .hud b { font-size: 18px; }
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div class="hud"><b id="fps">—</b> FPS · <span id="info">Test 3D RGA Tools</span></div>
+<script src="gpu.js"></script>
+</body>
+</html>

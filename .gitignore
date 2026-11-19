@@ -1,0 +1,14 @@
+# Dépendances et sorties de build
+node_modules/
+dist/
+
+# Icônes intermédiaires (régénérées par `npm run icons`)
+build/icon-*.png
+build/icon.svg
+
+# Divers
+*.log
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
