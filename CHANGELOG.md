@@ -2,6 +2,16 @@
 
 Format inspiré de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/), versions selon [SemVer](https://semver.org/lang/fr/).
 
+## [3.2.0] — 2026-11-19
+
+### Modifié
+- Le dépôt est désormais **public** : [max69rga/rga-tools](https://github.com/max69rga/rga-tools). Les mises à jour ne nécessitent plus de jeton.
+- Les releases sont compilées et publiées automatiquement par **GitHub Actions** à chaque tag `vX.Y.Z` (plus besoin de compiler en local).
+- `npm run release` vérifie la version et le CHANGELOG puis pousse le tag.
+
+### Supprimé
+- Jeton GitHub intégré au build (`.update-token`, `scripts/embed-token.js`).
+
 ## [3.1.0] — 2026-11-19
 
 ### Ajouté

@@ -111,7 +111,7 @@ ipcMain.handle('update:download', async () => {
 ipcMain.handle('update:install', () => {
   try { diag.cancelDiag(); updater.install(); return { ok: true }; } catch (e) { return { error: e.message }; }
 });
-ipcMain.handle('update:info', () => ({ repo: updater.repo, mode: updater.mode(), hasToken: updater.hasToken, version: app.getVersion() }));
+ipcMain.handle('update:info', () => ({ repo: updater.repo, mode: updater.mode(), version: app.getVersion() }));
 
 // ───────────────────────── Diagnostic / monitoring / config ─────────────────────────
 let offLive = null;

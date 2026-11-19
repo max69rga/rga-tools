@@ -11,14 +11,6 @@ const { TMP, log } = require('./util');
 const pkg = require('../../package.json');
 const REPO = process.env.RGA_UPDATE_REPO || pkg.updateRepo; // "owner/nom"
 
-// Jeton GitHub en lecture seule, intégré au moment du build (scripts/embed-token.js, fichier non versionné).
-function token() {
-  if (process.env.RGA_UPDATE_TOKEN) return process.env.RGA_UPDATE_TOKEN;
-  try {
-    const { t } = require('./update-token.json');
-    return t ? Buffer.from(t, 'base64').toString('utf8').split('').reverse().join('') : '';
-  } catch { return ''; }
-}
 const UA = `RGA-Tools/${app.getVersion()}`;
 
 let latest = null;      // dernière release trouvée
@@ -39,10 +31,8 @@ function cmp(a, b) {
 }
 
 function headers(extra = {}) {
-  const h = { 'User-Agent': UA, 'Accept': 'application/vnd.github+json', ...extra };
-  const t = token();
-  if (t) h.Authorization = `Bearer ${t}`;
-  return h;
+  // Dépôt public : aucune authentification nécessaire.
+  return { 'User-Agent': UA, 'Accept': 'application/vnd.github+json', ...extra };
 }
 
 function pickAsset(release) {
@@ -54,8 +44,8 @@ function pickAsset(release) {
 async function check() {
   if (!REPO) return { error: 'Aucun dépôt de mises à jour configuré.' };
   const res = await net.fetch(`https://api.github.com/repos/${REPO}/releases/latest`, { headers: headers() });
-  if (res.status === 404) return { current: app.getVersion(), available: false, error: token() ? 'Aucune version publiée, ou jeton sans accès au dépôt.' : 'Dépôt privé : jeton de mise à jour absent de ce build.' };
-  if (res.status === 401) return { current: app.getVersion(), available: false, error: 'Jeton de mise à jour invalide ou révoqué.' };
+  if (res.status === 404) return { current: app.getVersion(), available: false, error: 'Aucune version publiée pour le moment.' };
+  if (res.status === 403 || res.status === 429) return { current: app.getVersion(), available: false, error: 'Limite de requêtes GitHub atteinte, réessayez dans une heure.' };
   if (!res.ok) return { current: app.getVersion(), available: false, error: `GitHub a répondu ${res.status}` };
   const r = await res.json();
   const version = String(r.tag_name || '').replace(/^v/i, '');
@@ -69,7 +59,6 @@ async function download(onPct) {
   if (!latest?.asset) throw new Error('Aucun fichier de mise à jour adapté à cette version (portable / installée).');
   const a = latest.asset;
   const dest = path.join(TMP, `update-${latest.version}-${a.name}`);
-  // Les assets se téléchargent via l'API (fonctionne aussi avec un jeton sur dépôt privé).
   const res = await net.fetch(a.apiUrl, { headers: headers({ Accept: 'application/octet-stream' }) });
   if (!res.ok) throw new Error(`Téléchargement refusé (HTTP ${res.status})`);
   const total = Number(res.headers.get('content-length')) || a.size || 0;
@@ -130,4 +119,4 @@ function install() {
   setTimeout(() => app.quit(), 300);
 }
 
-module.exports = { check, download, install, mode, cmp, get repo() { return REPO; }, get hasToken() { return !!token(); } };
+module.exports = { check, download, install, mode, cmp, get repo() { return REPO; } };

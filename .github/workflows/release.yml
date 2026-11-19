@@ -1,0 +1,67 @@
+# Compile RGA Tools sous Windows et publie la release GitHub.
+# - Push d'un tag vX.Y.Z  -> build + release avec les deux exe (proposée en mise à jour aux postes).
+# - Lancement manuel       -> build seul, exe disponibles en artefacts (test, rien n'est publié).
+name: Build & Release
+
+on:
+  push:
+    tags: ['v*.*.*']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: windows-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Dépendances
+        run: npm ci
+
+      - name: Lire la version
+        id: ver
+        shell: pwsh
+        run: |
+          $v = (Get-Content package.json -Raw | ConvertFrom-Json).version
+          "version=$v" >> $env:GITHUB_OUTPUT
+          if ($env:GITHUB_REF_TYPE -eq 'tag' -and $env:GITHUB_REF_NAME -ne "v$v") {
+            throw "Le tag $env:GITHUB_REF_NAME ne correspond pas à la version v$v de package.json"
+          }
+
+      - name: Notes de version
+        run: node scripts/release-notes.js > notes.md
+
+      - name: Compilation (portable + installeur)
+        run: npm run dist
+
+      - name: Publier la release
+        if: github.ref_type == 'tag'
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $v = "${{ steps.ver.outputs.version }}"
+          gh release create "v$v" "dist/RGA-Tools-$v-portable.exe" "dist/RGA-Tools-$v-setup.exe" `
+            --title "RGA Tools $v" --notes-file notes.md --latest
+
+      - name: Artefacts (build manuel)
+        if: github.ref_type != 'tag'
+        uses: actions/upload-artifact@v4
+        with:
+          name: RGA-Tools-${{ steps.ver.outputs.version }}
+          path: |
+            dist/RGA-Tools-*-portable.exe
+            dist/RGA-Tools-*-setup.exe
+          retention-days: 7

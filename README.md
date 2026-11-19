@@ -9,9 +9,10 @@
 </p>
 
 <p align="center">
-  <img alt="Version" src="https://img.shields.io/badge/version-3.1.0-c31a24" />
+  <img alt="Version" src="https://img.shields.io/badge/version-3.2.0-c31a24" />
   <img alt="Plateforme" src="https://img.shields.io/badge/plateforme-Windows%2010%20%2F%2011-555" />
   <img alt="Electron" src="https://img.shields.io/badge/Electron-33-47848f" />
+  <a href="https://github.com/max69rga/rga-tools/actions/workflows/release.yml"><img alt="Build" src="https://github.com/max69rga/rga-tools/actions/workflows/release.yml/badge.svg" /></a>
 </p>
 
 ---
@@ -36,7 +37,7 @@ Toutes les analyses sont réalisées **localement** : aucune donnée n'est trans
 
 ## Installation
 
-Télécharger la dernière version dans l'onglet **Releases** du dépôt :
+Télécharger la dernière version sur la page **[Releases](https://github.com/max69rga/rga-tools/releases/latest)** :
 
 - `RGA-Tools-x.y.z-portable.exe` — exécutable unique, sans installation (idéal sur clé USB) ;
 - `RGA-Tools-x.y.z-setup.exe` — installeur (raccourcis menu Démarrer / Bureau, désinstalleur).
@@ -83,24 +84,22 @@ src/
 
 ### Mises à jour automatiques
 
-Au démarrage, RGA Tools interroge la dernière release GitHub du dépôt indiqué par `updateRepo` dans `package.json`. Si une version plus récente existe, elle est proposée (barre de titre et **Paramètres → Mises à jour**) :
+Au démarrage, RGA Tools interroge la dernière release du dépôt public indiqué par `updateRepo` dans `package.json`. Si une version plus récente existe, elle est proposée (barre de titre et **Paramètres → Mises à jour**) :
 
 - **version installée** : téléchargement de `RGA-Tools-x.y.z-setup.exe`, installation silencieuse, relance automatique ;
 - **version portable** : téléchargement de `RGA-Tools-x.y.z-portable.exe`, remplacement de l'exe après fermeture, relance.
 
-Le dépôt étant privé, un **jeton GitHub en lecture seule** est intégré à l'exe au moment du build :
-
-1. Créer un *fine-grained personal access token* sur GitHub (*Settings → Developer settings → Personal access tokens → Fine-grained tokens*) : expiration *No expiration*, accès au seul dépôt `rga-tools`, permission **Contents : Read-only**.
-2. Coller le jeton dans un fichier `.update-token` à la racine du projet (ignoré par Git).
-3. `npm run dist` l'intègre automatiquement (`src/lib/update-token.json`, également ignoré).
-
-> Le jeton peut être extrait de l'exe par une personne motivée : il ne donne qu'un accès en lecture au dépôt. En cas de fuite, le révoquer sur GitHub puis publier un nouveau build avec un nouveau jeton (les versions déjà installées devront alors être mises à jour manuellement une fois).
+Le téléchargement est contrôlé (taille et empreinte SHA-256 fournies par GitHub).
 
 ### Publier une version
 
-1. Mettre à jour `version` dans `package.json` et ajouter une entrée dans `CHANGELOG.md`.
-2. Commit des changements.
-3. `npm run dist` puis `npm run release` (tag `vX.Y.Z`, push, release GitHub avec les deux `.exe` et les notes du CHANGELOG).
+Les exe sont compilés par **GitHub Actions** ([`.github/workflows/release.yml`](.github/workflows/release.yml)) : aucun outil n'est nécessaire en local à part Git.
+
+1. Mettre à jour `version` dans `package.json` et ajouter une entrée `## [x.y.z]` dans `CHANGELOG.md`.
+2. Commit, puis `npm run release` (ou `git tag vX.Y.Z && git push origin vX.Y.Z`).
+3. GitHub Actions compile le portable et l'installeur, puis publie la release avec les notes du CHANGELOG. Les postes la reçoivent au démarrage suivant.
+
+Pour tester un build sans rien publier : onglet **Actions → Build & Release → Run workflow** ; les exe sont téléchargeables dans les artefacts de l'exécution.
 
 ## Notes
 
@@ -109,4 +108,4 @@ Le dépôt étant privé, un **jeton GitHub en lecture seule** est intégré à 
 
 ---
 
-© RGA Informatique — usage interne.
+© RGA Informatique.
