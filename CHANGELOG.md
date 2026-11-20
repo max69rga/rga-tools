@@ -2,6 +2,11 @@
 
 Format inspiré de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/), versions selon [SemVer](https://semver.org/lang/fr/).
 
+## [3.4.3] — 2026-11-20
+
+### Ajouté
+- **QR code sur le rapport** : en le scannant, le client ouvre le rapport complet sur son smartphone, puis peut l'imprimer ou l'enregistrer en PDF. Le téléphone doit être sur le même Wi-Fi que le PC et RGA Tools doit rester ouvert : le rapport est servi sur le réseau local seulement (port 47610), à une adresse impossible à deviner. Le bloc QR n'apparaît ni à l'impression ni sur le téléphone. Option « QR code sur les rapports » dans les Paramètres, activée par défaut.
+
 ## [3.4.2] — 2026-11-20
 
 ### Ajouté

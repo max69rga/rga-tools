@@ -12,6 +12,7 @@ const diag = require('./lib/diag');
 const report = require('./lib/report');
 const updater = require('./lib/updater');
 const events = require('./lib/events');
+const share = require('./lib/share');
 
 app.setAppUserModelId('RGA.Tools');
 if (!app.requestSingleInstanceLock()) app.quit();
@@ -21,7 +22,7 @@ const ASSETS = path.join(__dirname, 'renderer', 'assets');
 
 // ───────────────────────── Paramètres ─────────────────────────
 const SETTINGS_FILE = path.join(app.getPath('userData'), 'settings.json');
-const DEFAULTS = { theme: 'dark', tempLimit: 95, skipGpu: false, autoUpdate: true, overlay: true };
+const DEFAULTS = { theme: 'dark', tempLimit: 95, skipGpu: false, autoUpdate: true, overlay: true, shareQr: true };
 let settings = { ...DEFAULTS };
 try { settings = { ...DEFAULTS, ...JSON.parse(fs.readFileSync(SETTINGS_FILE, 'utf8')) }; } catch {}
 const saveSettings = () => { try { fs.writeFileSync(SETTINGS_FILE, JSON.stringify(settings, null, 1)); } catch {} };
@@ -66,7 +67,7 @@ function snapshots(dir) {
 }
 
 app.on('second-instance', () => { if (win) { if (win.isMinimized()) win.restore(); win.focus(); } });
-app.whenReady().then(createWindow);
+app.whenReady().then(() => { createWindow(); if (settings.shareQr) share.start(); });
 app.on('window-all-closed', () => app.quit());
 
 function send(ch, payload) { if (win && !win.isDestroyed()) win.webContents.send(ch, payload); }
@@ -91,7 +92,11 @@ ipcMain.handle('sys:info', () => ({
 }));
 ipcMain.handle('catalog', () => C);
 ipcMain.handle('settings:get', () => settings);
-ipcMain.handle('settings:set', (_e, patch) => { settings = { ...settings, ...patch }; saveSettings(); return settings; });
+ipcMain.handle('settings:set', (_e, patch) => {
+  settings = { ...settings, ...patch }; saveSettings();
+  if ('shareQr' in patch) settings.shareQr ? share.start() : share.stop();
+  return settings;
+});
 ipcMain.handle('open:url', (_e, url) => shell.openExternal(url));
 ipcMain.handle('open:path', (_e, p) => shell.openPath(p));
 ipcMain.handle('open:settings', (_e, uri) => shell.openExternal(uri));
@@ -244,13 +249,17 @@ ipcMain.handle('diag:run', async (_e, { profile, note }) => {
       if (stress && settings.overlay && !overlayManual) hideOverlay();
     }
     if (!R) return null;
-    R.reportFile = report.save(R, path.join(ASSETS, 'logo-rga.png'));
+    if (settings.shareQr) await share.start();
+    R.reportFile = report.save(R, path.join(ASSETS, 'logo-rga.png'), settings.shareQr ? share.urlFor : null);
     log(`Rapport enregistré : ${R.reportFile}`, 'success');
     return R;
   } catch (e) { log(`Erreur diagnostic : ${e.message}`, 'error'); return { error: e.message }; }
 });
 ipcMain.handle('diag:cancel', () => diag.cancelDiag());
-ipcMain.handle('report:save', (_e, R) => report.save(R, path.join(ASSETS, 'logo-rga.png')));
+ipcMain.handle('report:save', async (_e, R) => {
+  if (settings.shareQr) await share.start();
+  return report.save(R, path.join(ASSETS, 'logo-rga.png'), settings.shareQr ? share.urlFor : null);
+});
 ipcMain.handle('report:list', () => {
   const dir = path.join(app.getPath('desktop'), 'Diagnostics RGA');
   try {

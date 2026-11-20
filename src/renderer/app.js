@@ -840,6 +840,8 @@ PAGES.settings = () => {
       <label class="switch"><input type="checkbox" id="set-gpu" ${st.skipGpu ? 'checked' : ''}><span></span></label></div>
     <div class="row"><div class="tool-ic">${ic('cloud')}</div><div class="grow"><b>Vérifier les mises à jour au démarrage</b><div class="sub">Propose automatiquement les nouvelles versions publiées sur GitHub.</div></div>
       <label class="switch"><input type="checkbox" id="set-upd" ${st.autoUpdate !== false ? 'checked' : ''}><span></span></label></div>
+    <div class="row"><div class="tool-ic">${ic('wifi')}</div><div class="grow"><b>QR code sur les rapports</b><div class="sub">Ajoute au rapport un QR code pour l'ouvrir et l'imprimer depuis un smartphone connecté au même Wi-Fi, tant que RGA Tools est ouvert. Rien ne sort du réseau local.</div></div>
+      <label class="switch"><input type="checkbox" id="set-qr" ${st.shareQr !== false ? 'checked' : ''}><span></span></label></div>
     <div class="row"><div class="tool-ic">${ic('folder')}</div><div class="grow"><b>Rapports de diagnostic</b><div class="sub">Bureau\\Diagnostics RGA</div></div>
       <button class="ghost sm" id="set-reports">${ic('folder')}Ouvrir le dossier</button></div>
   </div>
@@ -848,7 +850,7 @@ PAGES.settings = () => {
   <h2 class="section">À propos</h2>
   <div class="card about">
     <img src="assets/logo-rga.png" alt="RGA Informatique" />
-    <div><h3>RGA Tools v${esc(S.sys.version)}</h3><div class="desc" style="margin-top:6px">Boîte à outils technicien de RGA Informatique : diagnostic matériel, monitoring, installation de logiciels et d'Office, nettoyage, réparation réseau et système.<br>Toutes les analyses sont réalisées localement ; aucune donnée n'est transmise.</div></div>
+    <div><h3>RGA Tools v${esc(S.sys.version)}</h3><div class="desc" style="margin-top:6px">Boîte à outils technicien de RGA Informatique : diagnostic matériel, monitoring, installation de logiciels et d'Office, nettoyage, réparation réseau et système.<br>Toutes les analyses sont réalisées localement ; aucune donnée n'est transmise hors du réseau local.</div></div>
   </div>`;
 };
 BIND.settings = () => {
@@ -859,6 +861,7 @@ BIND.settings = () => {
   $('#set-ov').onchange = (e) => save({ overlay: e.target.checked });
   $('#set-pawnio') && ($('#set-pawnio').onclick = installPawnIO);
   $('#set-upd').onchange = (e) => save({ autoUpdate: e.target.checked });
+  $('#set-qr').onchange = (e) => save({ shareQr: e.target.checked });
   bindUpdate();
   $('#set-reports').onclick = async () => { const r = S.reports[0]; if (r) api.openPath(r.file.replace(/[\\/][^\\/]+$/, '')); else toast('Aucun rapport pour le moment.', 'info'); };
 };

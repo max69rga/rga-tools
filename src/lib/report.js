@@ -4,6 +4,7 @@
 const fs = require('fs');
 const path = require('path');
 const { app } = require('electron');
+const qr = require('./qr');
 
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const v = (x, unit = '') => (x == null || x === '' ? '—' : `${esc(x)}${unit}`);
@@ -102,7 +103,7 @@ function fullConfig(I, H) {
 </div>`;
 }
 
-function render(R, logoDataUri) {
+function render(R, logoDataUri, shareUrl) {
   const I = R.inventory || {}, H = R.health || {};
   const scoreCol = R.score == null ? '#888' : R.score >= 85 ? '#30a46c' : R.score >= 60 ? '#f5a524' : '#e5484d';
   const date = new Date(R.startedAt).toLocaleString('fr-FR');
@@ -144,9 +145,11 @@ table{width:100%;border-collapse:collapse}th{text-align:left;color:var(--m);font
 .mut{color:var(--m);font-weight:400}.note{background:#fff7f7;border:1px solid #f3d0d2;border-radius:10px;padding:10px 14px;margin-bottom:16px}
 details{margin-top:26px}details summary{cursor:pointer;font-size:13px;text-transform:uppercase;letter-spacing:.8px;color:var(--m);margin-bottom:10px}
 details .grid th{width:42%}
+
+.qr{display:flex;align-items:center;gap:18px;margin-bottom:16px}.qr svg{flex:none;border-radius:6px}.qr b{font-size:15px}.qr p{margin:4px 0 0;color:var(--m);font-size:13px}.qr code{font-size:12px;color:var(--t);word-break:break-all}
 footer{margin-top:40px;color:var(--m);font-size:12px;text-align:center}
 @media(max-width:640px){.top{grid-template-columns:1fr}header .meta{text-align:left}}
-@media print{body{background:#fff}.card,.test,.f{break-inside:avoid}details:not([open]){display:none}}
+@media print{body{background:#fff}.qr{display:none}.card,.test,.f{break-inside:avoid}details:not([open]){display:none}}
 </style></head><body><div class="wrap">
 <header><img src="${logoDataUri}" alt="RGA Informatique"><div class="meta"><h1>${esc(R.profileName)}</h1>${esc(I.host)} · ${esc(date)}</div></header>
 ${R.note ? `<div class="note"><b>Symptôme signalé :</b> ${esc(R.note)}</div>` : ''}
@@ -154,6 +157,7 @@ ${R.note ? `<div class="note"><b>Symptôme signalé :</b> ${esc(R.note)}</div>` 
   <div class="card score"><div class="ring"><div>${R.score ?? '—'}</div></div><div class="mut" style="margin-top:8px">Note globale / 100</div><div class="verdict">${verdict}</div></div>
   <div class="card"><h3>À traiter</h3>${issues.length ? issues.map(finding).join('') : '<p class="mut">Aucun problème ni point d’attention : la machine est saine sur les tests effectués.</p>'}</div>
 </div>
+${shareUrl ? `<!--qr--><div class="card qr">${qr.svg(shareUrl, 132)}<div><b>Ouvrir ce rapport sur un smartphone</b><p>Scannez le QR code avec l’appareil photo : le rapport s’ouvre sur le téléphone, qui peut l’imprimer ou l’enregistrer en PDF (menu Partager → Imprimer).</p><p>Le téléphone doit être connecté au même Wi-Fi que ce PC, et RGA Tools doit rester ouvert.<br><code>${esc(shareUrl)}</code></p></div></div><!--/qr-->` : ''}
 ${oks.length ? `<h2>Vérifié sans problème</h2><div class="card oks">${oks.map(f => `<span title="${esc(f.detail)}">✓ ${esc(f.title)}</span>`).join('')}</div>` : ''}
 ${testEntries.length ? `<h2>Mesures des tests</h2>${testEntries.map(([k, t]) => testCard(k, t)).join('')}` : ''}
 ${(R.disk || []).length ? `<h2>Débit des stockages</h2><div class="grid">${R.disk.map(d => `<div class="card"><h3>Lecteur ${esc(d.drive)}:</h3><table><tr><th>Lecture séquentielle</th><td>${v(d.seqRead, ' Mo/s')}</td></tr><tr><th>Écriture séquentielle</th><td>${v(d.seqWrite, ' Mo/s')}</td></tr><tr><th>Lecture aléatoire</th><td>${v(d.ranRead, ' Mo/s')}</td></tr></table></div>`).join('')}</div>` : ''}
@@ -163,14 +167,16 @@ ${(R.disk || []).length ? `<h2>Débit des stockages</h2><div class="grid">${R.di
 </div></body></html>`;
 }
 
-function save(R, logoPath) {
+function save(R, logoPath, urlFor) {
   const logo = 'data:image/png;base64,' + fs.readFileSync(logoPath).toString('base64');
   const dir = path.join(app.getPath('desktop'), 'Diagnostics RGA');
   fs.mkdirSync(dir, { recursive: true });
   const stamp = new Date(R.startedAt).toISOString().slice(0, 16).replace(/[:T]/g, '-');
   const host = (R.inventory?.host || 'PC').replace(/[^\w-]/g, '');
   const file = path.join(dir, `${host}_${R.profile}_${stamp}.html`);
-  fs.writeFileSync(file, render(R, logo), 'utf8');
+  let shareUrl = null;
+  try { shareUrl = urlFor ? urlFor(file) : null; } catch {}
+  fs.writeFileSync(file, render(R, logo, shareUrl), 'utf8');
   fs.writeFileSync(file.replace(/\.html$/, '.json'), JSON.stringify(R, null, 1), 'utf8');
   return file;
 }
