@@ -34,12 +34,31 @@ function run(command, { onLine, timeout = 0 } = {}) {
   });
 }
 
-// Script PowerShell (encodé) -> texte UTF-8.
-function ps(script, { timeout = 120000 } = {}) {
-  const full = `$ProgressPreference='SilentlyContinue';$ErrorActionPreference='SilentlyContinue';[Console]::OutputEncoding=[Text.Encoding]::UTF8;${script}`;
-  const enc = Buffer.from(full, 'utf16le').toString('base64');
+// Scripts PowerShell : écrits en clair dans %TEMP%\RGATools\ps (lisibles, nommés selon leur rôle)
+// puis exécutés avec -File. Pas de commande encodée : plus transparent pour les antivirus.
+const PSDIR = path.join(TMP, 'ps');
+const PS_HEADER = [
+  '# Script généré par RGA Tools (RGA Informatique) : https://github.com/max69rga/rga-tools',
+  "$ProgressPreference = 'SilentlyContinue'",
+  "$ErrorActionPreference = 'SilentlyContinue'",
+  '[Console]::OutputEncoding = [Text.Encoding]::UTF8',
+  '',
+].join('\r\n');
+function psFile(script, name = 'rga') {
+  fs.mkdirSync(PSDIR, { recursive: true });
+  const body = PS_HEADER + script.replace(/\r?\n/g, '\r\n');
+  const hash = require('crypto').createHash('sha1').update(body).digest('hex').slice(0, 10);
+  const file = path.join(PSDIR, `${name.replace(/[^\w-]/g, '_')}-${hash}.ps1`);
+  if (!fs.existsSync(file)) fs.writeFileSync(file, '﻿' + body, 'utf8'); // BOM : accents lus par PowerShell 5.1
+  return file;
+}
+const psArgs = (file) => ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'RemoteSigned', '-File', file];
+
+// Exécute un script PowerShell -> texte UTF-8.
+function ps(script, { timeout = 120000, name } = {}) {
+  const file = psFile(script, name);
   return new Promise((resolve) => {
-    const child = spawn('powershell.exe', ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-EncodedCommand', enc], { windowsHide: true });
+    const child = spawn('powershell.exe', psArgs(file), { windowsHide: true });
     let out = '', err = '';
     child.stdout.on('data', d => (out += d.toString('utf8')));
     child.stderr.on('data', d => (err += d.toString('utf8')));
@@ -51,7 +70,10 @@ function ps(script, { timeout = 120000 } = {}) {
 
 // Script PowerShell dont la dernière expression est convertie en JSON.
 async function psJson(script, opts) {
-  const r = await ps(`$__r = & { ${script} }; $__r | ConvertTo-Json -Depth 6 -Compress`, opts);
+  const r = await ps(`$__r = & {
+${script}
+}
+$__r | ConvertTo-Json -Depth 6 -Compress`, opts);
   const txt = r.out.trim();
   if (!txt) return null;
   try { return JSON.parse(txt.replace(/^﻿/, '')); } catch { return null; }
@@ -84,4 +106,4 @@ async function download(url, dest, onPct) {
 
 const sleep = (ms) => new Promise(r => setTimeout(r, ms));
 
-module.exports = { TMP, tmpFile, safeRm, setSink, log, progress, status, emit, run, ps, psJson, launch, download, sleep };
+module.exports = { TMP, tmpFile, psFile, psArgs, safeRm, setSink, log, progress, status, emit, run, ps, psJson, launch, download, sleep };

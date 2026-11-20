@@ -2,6 +2,12 @@
 
 Format inspiré de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/), versions selon [SemVer](https://semver.org/lang/fr/).
 
+## [3.4.1] — 2026-11-20
+
+### Modifié
+- Plus aucune commande PowerShell encodée (`-EncodedCommand`) : les scripts sont écrits en clair dans `%TEMP%\RGATools\ps` (nommés selon leur rôle : `capteurs`, `inventaire`, `sante`, `journaux`…) puis exécutés avec `-File` et la stratégie `RemoteSigned` au lieu de `Bypass`. Réduit les faux positifs des antivirus (quarantaine Norton signalée).
+- Informations d'éditeur complétées dans les exe (RGA Informatique).
+
 ## [3.4.0] — 2026-11-20
 
 ### Ajouté

@@ -1,7 +1,7 @@
 {
   "name": "rga-tools",
   "productName": "RGA Tools",
-  "version": "3.4.0",
+  "version": "3.4.1",
   "private": true,
   "description": "RGA Informatique — boîte à outils technicien : diagnostic, monitoring, installation, nettoyage, réparation.",
   "main": "src/main.js",
@@ -29,7 +29,8 @@
     "win": {
       "icon": "build/icon.ico",
       "requestedExecutionLevel": "requireAdministrator",
-      "signAndEditExecutable": true
+      "signAndEditExecutable": true,
+      "legalTrademarks": "RGA Informatique"
     },
     "portable": {
       "artifactName": "RGA-Tools-${version}-portable.exe",

@@ -28,7 +28,7 @@ foreach ($log in @(${logNames})) {
   }
 }
 [pscustomobject]@{ events = $out; disks = $disks }`;
-  const r = await psJson(script, { timeout: 240000 });
+  const r = await psJson(script, { timeout: 240000, name: 'journaux' });
   return { events: r?.events ? (Array.isArray(r.events) ? r.events : [r.events]) : [], disks: r?.disks || {} };
 }
 

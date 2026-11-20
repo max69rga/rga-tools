@@ -80,7 +80,7 @@ $hot = Get-HotFix | Sort-Object InstalledOn -Descending | Select-Object -First 1
   lastUpdate= if($hot.InstalledOn){ $hot.InstalledOn.ToString('yyyy-MM-dd') }else{ $null }
 }`;
 
-const getInventory = () => psJson(INVENTORY, { timeout: 180000 });
-const getHealth = () => psJson(HEALTH, { timeout: 180000 });
+const getInventory = () => psJson(INVENTORY, { timeout: 180000, name: 'inventaire' });
+const getHealth = () => psJson(HEALTH, { timeout: 180000, name: 'sante' });
 
 module.exports = { getInventory, getHealth };

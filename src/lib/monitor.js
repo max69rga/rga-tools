@@ -7,6 +7,7 @@ const { app } = require('electron');
 const { spawn } = require('child_process');
 const os = require('os');
 const path = require('path');
+const { psFile, psArgs } = require('./util');
 
 const LHM_DIR = app?.isPackaged ? path.join(process.resourcesPath, 'lhm') : path.join(__dirname, '..', '..', 'vendor', 'lhm');
 const NVSMI = path.join(process.env.SystemRoot || 'C:\\Windows', 'System32', 'nvidia-smi.exe');
@@ -97,8 +98,7 @@ class Monitor {
   constructor() { this.child = null; this.listeners = new Set(); this.last = null; this.history = []; }
   start() {
     if (this.child) return;
-    const enc = Buffer.from(LOOP, 'utf16le').toString('base64');
-    this.child = spawn('powershell.exe', ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-EncodedCommand', enc], { windowsHide: true });
+    this.child = spawn('powershell.exe', psArgs(psFile(LOOP, 'capteurs')), { windowsHide: true });
     let buf = '';
     this.child.stdout.on('data', (d) => {
       buf += d.toString('utf8');

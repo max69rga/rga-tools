@@ -9,7 +9,7 @@
 </p>
 
 <p align="center">
-  <img alt="Version" src="https://img.shields.io/badge/version-3.4.0-c31a24" />
+  <img alt="Version" src="https://img.shields.io/badge/version-3.4.1-c31a24" />
   <img alt="Plateforme" src="https://img.shields.io/badge/plateforme-Windows%2010%20%2F%2011-555" />
   <img alt="Electron" src="https://img.shields.io/badge/Electron-33-47848f" />
   <a href="https://github.com/max69rga/rga-tools/actions/workflows/release.yml"><img alt="Build" src="https://github.com/max69rga/rga-tools/actions/workflows/release.yml/badge.svg" /></a>
@@ -111,6 +111,14 @@ Les températures sont lues par **LibreHardwareMonitorLib** (v0.9.6, licence MPL
 
 - Carte graphique : sans prérequis (NVIDIA, AMD, Intel).
 - Processeur, VRM : droits administrateur (toujours le cas avec les exe) **et** pilote **PawnIO** installé sur le PC. RGA Tools affiche son statut et propose son installeur officiel dans **Paramètres**.
+
+## Antivirus
+
+Les exe ne sont pas signés : certains antivirus (Norton, Defender…) peuvent les bloquer par manque de réputation ou par heuristique (accès matériel, scripts PowerShell, mots de passe WiFi…). RGA Tools n'utilise aucune commande encodée : tous les scripts PowerShell sont lisibles dans `%TEMP%\RGATools\ps`.
+
+En cas de quarantaine : restaurer le fichier et l'exclure, puis signaler le faux positif :
+- Norton : https://submit.norton.com (type *False Positive*) ;
+- Microsoft Defender : https://www.microsoft.com/wdsi/filesubmission (*Software developer*).
 
 ## Notes
 
