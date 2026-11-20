@@ -1,19 +1,25 @@
 // Overlay : températures et charge en temps réel, au-dessus de toutes les fenêtres.
 const $ = (id) => document.getElementById(id);
 const cls = (t, warm, hot) => (t == null ? '' : t >= hot ? 'hot' : t >= warm ? 'warm' : 'ok');
-const temp = (el, t, warm, hot) => { el.innerHTML = t == null ? '—' : `${Math.round(t)}<small>°C</small>`; el.className = `v ${cls(t, warm, hot)}`; };
+const temp = (el, t, warm, hot, approx) => { el.innerHTML = t == null ? '—' : `${approx ? '~' : ''}${Math.round(t)}<small>°C</small>`; el.title = approx ? 'Valeur estimée à partir d’un capteur voisin' : ''; el.className = `v ${cls(t, warm, hot)}`; };
 const pct = (id, v) => { $(id).textContent = v == null ? '—' : `${Math.round(v)} %`; $(`${id}b`).style.width = `${Math.max(0, Math.min(100, v || 0))}%`; };
 const w = (n) => (n == null ? '' : `${Math.round(n)} W`);
 
 window.overlay.onSample((s) => {
-  temp($('ct'), s.cpuTemp, 80, 92);
-  temp($('gt'), s.gpuTemp, 80, 88);
+  temp($('ct'), s.cpuTemp, 80, 92, s.cpuTempApprox);
+  temp($('gt'), s.gpuTemp, 80, 88, s.gpuTempApprox);
   $('cs').textContent = [s.mhz ? `${s.mhz} MHz` : '', w(s.cpuPower)].filter(Boolean).join(' · ');
   $('gs').textContent = [s.gpuHotspot != null ? `Hotspot ${Math.round(s.gpuHotspot)}°` : '', w(s.gpuPower)].filter(Boolean).join(' · ');
   pct('cpu', s.cpu); pct('gpu', s.gpu); pct('ram', s.ram);
   const hint = $('hint');
   if (s.cpuTemp == null) { hint.hidden = false; hint.textContent = 'Temp. CPU : pilote PawnIO ou droits administrateur requis.'; }
-  else if (s.cpuTempSrc === 'acpi') { hint.hidden = false; hint.textContent = 'Temp. CPU : zone thermique ACPI (approximative).'; }
+  else if (s.cpuTempApprox || s.gpuTempApprox) {
+    hint.hidden = false;
+    hint.textContent = '~ estimé : ' + [
+      s.cpuTempSrc === 'mb' ? 'CPU via carte mère' : s.cpuTempSrc === 'acpi' ? 'CPU via zone ACPI' : '',
+      s.gpuTempSrc === 'hotspot' ? 'GPU via point chaud' : s.gpuTempSrc === 'cpu' ? 'GPU intégré = temp. CPU' : '',
+    ].filter(Boolean).join(' · ');
+  }
   else hint.hidden = true;
 });
 

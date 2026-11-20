@@ -23,6 +23,7 @@ try {
   $lhm = New-Object LibreHardwareMonitor.Hardware.Computer
   $lhm.IsCpuEnabled = $true; $lhm.IsGpuEnabled = $true; $lhm.IsMotherboardEnabled = $true; $lhm.IsStorageEnabled = $true
   $lhm.Open()
+  $hwt = (@($lhm.Hardware) | ForEach-Object { "$($_.HardwareType)" }) -join ','
 } catch { $lhm = $null }
 $base = (Get-CimInstance Win32_Processor | Select-Object -First 1).MaxClockSpeed
 $nv = '${q(NVSMI)}'; $hasNv = Test-Path $nv
@@ -62,7 +63,7 @@ while ($true) {
     diskR = [double]$d.DiskReadBytesPersec; diskW = [double]$d.DiskWriteBytesPersec; diskBusy = [math]::Min(100, [double]$d.PercentDiskTime)
     rx = $rx; tx = $tx
     acpi = if ($acpi) { [math]::Round($acpi, 1) } else { $null }
-    lhm = if ($lhm) { $rows } else { 'OFF' }; nv = $nvo
+    lhm = if ($lhm) { $rows } else { 'OFF' }; hw = $hwt; nv = $nvo
   }
   [Console]::Out.WriteLine(($o | ConvertTo-Json -Compress))
   [Console]::Out.Flush()
@@ -89,6 +90,10 @@ function parseLhm(txt) {
     gpuHotspot: pick(rows, 'Temperature', GPU, [/^GPU Hot ?Spot$/i, /^GPU Junction$/i]),
     vrmTemp: pick(rows, 'Temperature', MB, [/VRM|MOS/i], 'max'),
     diskTemp: pick(rows, 'Temperature', DISK, [/^Composite Temperature$/i, /^Temperature$/i, /^Temperature #1$/i], 'max'),
+    // Replis : autre capteur proche quand le capteur principal manque (noms variables selon Intel / AMD / portable).
+    cpuTempAlt: pick(rows, 'Temperature', CPU, [/^(?!.*(distance|tj ?max|delta)).*$/i], 'max'),
+    mbCpuTemp: pick(rows, 'Temperature', MB, [/^CPU( Socket| Package| Temp(erature)?)?$/i, /PECI|CPUTIN|CPU/i]),
+    gpuTempAlt: pick(rows, 'Temperature', GPU, [/^(?!.*(hot ?spot|junction|memory|vram|mem)).*$/i], 'max'),
     cpuPower: pick(rows, 'Power', CPU, [/^Package$/i, /^CPU Package$/i, /^CPU Cores$/i]),
     gpuPower: pick(rows, 'Power', GPU, [/^GPU Package$/i, /^GPU Power$/i, /^GPU Total$/i, /^GPU Core$/i]),
   };
@@ -118,14 +123,27 @@ class Monitor {
     s.ramTotalGB = Math.round((total / 1073741824) * 10) / 10;
     const lhm = parseLhm(raw.lhm);
     s.sensors = lhm ? 'lhm' : 'off';
-    if (lhm) for (const [k, v] of Object.entries(lhm)) if (v != null) s[k] = v;
+    const alt = {};
+    if (lhm) for (const [k, v] of Object.entries(lhm)) if (v != null) { if (/Alt$|^mbCpu/.test(k)) alt[k] = v; else s[k] = v; }
+    // Température CPU : capteur principal, puis autre capteur du processeur, carte mère, zone ACPI.
     if (s.cpuTemp != null) s.cpuTempSrc = 'lhm';
-    if (raw.nv && s.gpuTemp == null) {
+    else if (alt.cpuTempAlt != null) { s.cpuTemp = alt.cpuTempAlt; s.cpuTempSrc = 'cores'; }
+    else if (alt.mbCpuTemp != null) { s.cpuTemp = alt.mbCpuTemp; s.cpuTempSrc = 'mb'; }
+    else if (raw.acpi != null) { s.cpuTemp = raw.acpi; s.cpuTempSrc = 'acpi'; }
+    // Température GPU : capteur principal, autre capteur du GPU, pilote NVIDIA, point chaud, puis
+    // température du processeur si la machine n'a qu'un GPU intégré (même puce).
+    if (s.gpuTemp != null) s.gpuTempSrc = 'lhm';
+    else if (alt.gpuTempAlt != null) { s.gpuTemp = alt.gpuTempAlt; s.gpuTempSrc = 'lhm'; }
+    if (raw.nv) {
       const [t, p] = String(raw.nv).split(',').map(x => num(x));
-      if (t != null) s.gpuTemp = t;
+      if (t != null && s.gpuTemp == null) { s.gpuTemp = t; s.gpuTempSrc = 'nv'; }
       if (p != null && s.gpuPower == null) s.gpuPower = p;
     }
-    if (s.cpuTemp == null && raw.acpi != null) { s.cpuTemp = raw.acpi; s.cpuTempSrc = 'acpi'; }
+    if (s.gpuTemp == null && s.gpuHotspot != null) { s.gpuTemp = s.gpuHotspot; s.gpuTempSrc = 'hotspot'; }
+    const dedicated = /Gpu(Nvidia|Amd)/i.test(raw.hw || '') || !!raw.nv;
+    if (s.gpuTemp == null && s.cpuTemp != null && raw.hw && !dedicated) { s.gpuTemp = s.cpuTemp; s.gpuTempSrc = 'cpu'; }
+    s.cpuTempApprox = ['mb', 'acpi'].includes(s.cpuTempSrc);
+    s.gpuTempApprox = ['hotspot', 'cpu'].includes(s.gpuTempSrc);
     for (const k of ['cpuTemp', 'gpuTemp', 'gpuHotspot', 'vrmTemp', 'diskTemp', 'cpuPower', 'gpuPower']) if (s[k] != null) s[k] = Math.round(s[k] * 10) / 10;
     // Température la plus haute (garde-fou des tests de charge).
     const temps = [s.cpuTemp, s.gpuTemp, s.gpuHotspot].filter(x => x != null);

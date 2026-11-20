@@ -2,6 +2,22 @@
 
 Format inspiré de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/), versions selon [SemVer](https://semver.org/lang/fr/).
 
+## [3.4.2] — 2026-11-20
+
+### Ajouté
+- **Températures de repli** : quand le capteur principal manque (selon le processeur Intel / AMD, le portable ou les droits), l'application prend le capteur le plus proche : cœur le plus chaud, sonde CPU de la carte mère, zone ACPI ; pour la carte graphique, point chaud ou température du processeur sur un GPU intégré. Les valeurs estimées sont précédées de « ~ » dans l'overlay et signalées dans le monitoring et le rapport.
+- **Journaux Windows plus précis** :
+  - Écrans bleus : pilote désigné par Windows (avec son rôle), exception expliquée, paramètres et fichier de vidage.
+  - Arrêts brutaux distingués : écran bleu, appui long sur le bouton, plantage pendant la veille, coupure d'alimentation ; contexte des 15 minutes précédant l'arrêt.
+  - Plantages d'applications : version, module en cause, exception expliquée, emplacement du programme.
+  - Windows Update : une trentaine de codes d'erreur expliqués ; mises à jour d'applications du Microsoft Store signalées à part.
+  - Services : code d'erreur traduit. WHEA : composant et périphérique PCIe nommés.
+  - Fréquence de chaque problème (nombre de jours, 7 derniers jours) ; message réel pour les événements non reconnus.
+
+### Modifié
+- Un même plantage (écran bleu, Kernel-Power 41, EventLog 6008) ne compte plus que pour un seul problème.
+- **Rapport recentré sur le diagnostic** : liste « À traiter » avec les détails, points sains regroupés sur une ligne, mesures utiles à chaque test seulement, fiche « Machine » courte (sans noms génériques ni écrans virtuels). La configuration complète reste disponible, repliée.
+
 ## [3.4.1] — 2026-11-20
 
 ### Modifié

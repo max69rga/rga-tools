@@ -303,6 +303,7 @@ pre.out { background: var(--bg); border: 1px solid var(--border); border-radius:
 .ev-row.open > .row { background: var(--surface-2); }
 .ev-detail { padding: 4px 16px 16px 56px; background: var(--surface-2); font-size: 13px; }
 .ev-detail p { margin: 6px 0; color: var(--muted); } .ev-detail p b { color: var(--text); }
+.ev-facts { margin: 6px 0 4px; padding-left: 18px; font-size: 13px; } .ev-facts li { margin: 2px 0; word-break: break-word; }
 .ev-samples { margin-top: 10px; border: 1px solid var(--border); border-radius: 8px; background: var(--bg); max-height: 220px; overflow: auto; }
 .ev-samples div { display: flex; gap: 12px; padding: 7px 10px; border-top: 1px solid var(--border); font: 12px/1.5 var(--mono); color: var(--muted); white-space: pre-wrap; word-break: break-word; }
 .ev-samples div:first-child { border-top: 0; } .ev-samples .t { flex: none; color: var(--faint); }

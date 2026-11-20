@@ -81,6 +81,8 @@ function sampleStats(samples) {
     gpuAvg: r1(avg(pick('gpu'))), tempAvg: r1(avg(pick('temp'))), tempMax: max(pick('temp')), ramAvg: r1(avg(pick('ram'))), n: samples.length,
     cpuTempAvg: r1(avg(pick('cpuTemp'))), cpuTempMax: max(pick('cpuTemp')), gpuTempAvg: r1(avg(pick('gpuTemp'))), gpuTempMax: max(pick('gpuTemp')),
     hotspotMax: max(pick('gpuHotspot')), vrmMax: max(pick('vrmTemp')), cpuPowerMax: max(pick('cpuPower')), gpuPowerMax: max(pick('gpuPower')),
+    cpuTempApprox: samples.some(x => x.cpuTemp != null) && samples.every(x => x.cpuTemp == null || x.cpuTempApprox),
+    gpuShared: samples.some(x => x.gpuTemp != null) && samples.every(x => x.gpuTemp == null || x.gpuTempSrc === 'cpu'),
     tempSource: samples.some(x => x.cpuTempSrc === 'lhm') ? 'lhm' : samples.some(x => x.cpuTempSrc === 'acpi') ? 'acpi' : samples.some(x => x.gpuTemp != null) ? 'gpu' : null,
   };
 }
@@ -165,7 +167,7 @@ async function diskPhase() {
 // ─── Analyse ───
 function analyse(R) {
   const F = []; // { level: 'error'|'warn'|'info'|'ok', area, title, detail }
-  const add = (level, area, title, detail = '') => F.push({ level, area, title, detail });
+  const add = (level, area, title, detail = '', extra) => F.push({ level, area, title, detail, ...(extra?.length ? { extra } : {}) });
   const inv = R.inventory || {}, H = R.health || {};
   const tests = R.tests || {};
 
@@ -174,8 +176,10 @@ function analyse(R) {
   const covered = new Set();
   for (const g of R.events?.problems || []) {
     covered.add(g.rule);
-    add(g.sev, `Journaux · ${g.cat}`, `${g.title} (${g.count}× en 30 j)`, [g.cause, g.action && `À faire : ${g.action}`].filter(Boolean).join(' '));
+    add(g.sev, `Journaux · ${g.cat}`, g.title, [g.cause, g.action && `À faire : ${g.action}`].filter(Boolean).join(' '),
+      [...(g.details || []), g.before && (g.before.length ? `Juste avant l’arrêt : ${g.before.join(' ; ')}` : 'Aucune erreur dans les 15 minutes avant l’arrêt'), g.trend].filter(Boolean));
   }
+  if (covered.has('bsod')) covered.add('kp41'); // l'arrêt brutal vient de l'écran bleu déjà signalé
   if (H.whea > 0 && !covered.has('whea')) add('error', 'Stabilité', `${H.whea} erreur(s) matérielle(s) WHEA sur 30 jours`, `Dernière : ${H.wheaLast}. Indique souvent une instabilité CPU/RAM (overclocking, XMP, tension) ou un composant défaillant.`);
   if (H.bsod > 0 && !covered.has('bsod')) add('error', 'Stabilité', `${H.bsod} écran(s) bleu(s) sur 30 jours`, `Dernier : ${H.bsodLast}.`);
   if (H.unexpectedShutdown > 0 && !covered.has('kp41')) add('warn', 'Stabilité', `${H.unexpectedShutdown} arrêt(s) inattendu(s) sur 30 jours`, 'Coupures de courant, appui long sur le bouton, ou problème d\'alimentation / surchauffe.');
@@ -190,10 +194,12 @@ function analyse(R) {
   else if (cpuN?.sensors?.mhzAvg) add('ok', 'Processeur', 'Fréquence sous charge correcte', `Moyenne ${cpuN.sensors.mhzAvg} MHz (base ${base} MHz).`);
   if (tests.cpuN?.cpuCrashed || tests.cpu1?.cpuCrashed) add('error', 'Processeur', 'Un thread de calcul a planté pendant le test');
   const mx = (k) => Math.max(0, ...Object.values(tests).map(t => t?.sensors?.[k] || 0));
-  const cT = mx('cpuTempMax'), gT = mx('gpuTempMax'), hT = mx('hotspotMax'), vT = mx('vrmMax');
-  if (cT >= 95) add('error', 'Températures', `Processeur à ${cT} °C sous charge`, 'Surchauffe du processeur : vérifier le ventirad, la poussière et la pâte thermique.');
-  else if (cT >= 85) add('warn', 'Températures', `Processeur à ${cT} °C sous charge`, 'Température élevée : un nettoyage du refroidissement est conseillé.');
-  else if (cT > 0) add('ok', 'Températures', `Processeur : ${cT} °C maximum sous charge`);
+  const gShared = Object.values(tests).every(t => !t?.sensors?.gpuTempMax || t.sensors.gpuShared);
+  const cApprox = Object.values(tests).some(t => t?.sensors?.cpuTempMax && t.sensors.cpuTempApprox) ? ' (valeur estimée)' : '';
+  const cT = mx('cpuTempMax'), gT = gShared ? 0 : mx('gpuTempMax'), hT = mx('hotspotMax'), vT = mx('vrmMax');
+  if (cT >= 95) add('error', 'Températures', `Processeur à ${cT} °C sous charge${cApprox}`, 'Surchauffe du processeur : vérifier le ventirad, la poussière et la pâte thermique.');
+  else if (cT >= 85) add('warn', 'Températures', `Processeur à ${cT} °C sous charge${cApprox}`, 'Température élevée : un nettoyage du refroidissement est conseillé.');
+  else if (cT > 0) add('ok', 'Températures', `Processeur : ${cT} °C maximum sous charge${cApprox}`);
   if (gT >= 90 || hT >= 105) add('error', 'Températures', `Carte graphique à ${gT} °C${hT ? ` (point chaud ${hT} °C)` : ''}`, 'Surchauffe GPU : nettoyer les ventilateurs, vérifier le flux d’air du boîtier, éventuellement repâter la carte.');
   else if (gT >= 83 || hT >= 95) add('warn', 'Températures', `Carte graphique à ${gT} °C${hT ? ` (point chaud ${hT} °C)` : ''}`, 'Température GPU élevée : améliorer le flux d’air.');
   else if (gT > 0) add('ok', 'Températures', `Carte graphique : ${gT} °C maximum sous charge`);

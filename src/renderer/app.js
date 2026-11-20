@@ -286,7 +286,7 @@ function findingsHtml(F) {
   const order = ['error', 'warn', 'info', 'ok'];
   return [...F].sort((a, b) => order.indexOf(a.level) - order.indexOf(b.level)).map(f => `
     <div class="finding"><span class="lv ${f.level}">${ic(LV_ICON[f.level])}</span>
-      <div><div class="area">${esc(f.area)}</div><b>${esc(f.title)}</b>${f.detail ? `<p>${esc(f.detail)}</p>` : ''}</div></div>`).join('') || '<div class="empty">Aucune remarque.</div>';
+      <div><div class="area">${esc(f.area)}</div><b>${esc(f.title)}</b>${f.detail ? `<p>${esc(f.detail)}</p>` : ''}${f.extra?.length ? `<ul class="ev-facts">${f.extra.map(x => `<li>${esc(x)}</li>`).join('')}</ul>` : ''}</div></div>`).join('') || '<div class="empty">Aucune remarque.</div>';
 }
 function scoreColor(s) { return s >= 85 ? 'var(--ok)' : s >= 60 ? 'var(--warn)' : 'var(--err)'; }
 
@@ -369,8 +369,8 @@ const MON = [
   { k: 'gpu', label: 'Carte graphique', icon: 'gpu', unit: '%', max: 100, sub: () => 'Moteur le plus chargé' },
   { k: 'disk', label: 'Disques', icon: 'disk', unit: '', max: null, val: (s) => (s.diskR || 0) + (s.diskW || 0), fmt: fmtBytes, sub: (s) => `Lecture ${fmtBytes(s.diskR)} · Écriture ${fmtBytes(s.diskW)}` },
   { k: 'net', label: 'Réseau', icon: 'net', unit: '', max: null, val: (s) => (s.rx || 0) + (s.tx || 0), fmt: fmtBytes, sub: (s) => `↓ ${fmtBytes(s.rx)} · ↑ ${fmtBytes(s.tx)}` },
-  { k: 'cpuTemp', label: 'Température CPU', icon: 'temp', unit: '°C', max: 110, sub: (s) => s.cpuTemp == null ? sensorHint() : `${s.cpuTempSrc === 'lhm' ? 'Capteur du processeur' : 'Zone thermique ACPI'}${s.cpuPower != null ? ` · ${Math.round(s.cpuPower)} W` : ''}${s.vrmTemp != null ? ` · VRM ${Math.round(s.vrmTemp)} °C` : ''}` },
-  { k: 'gpuTemp', label: 'Température GPU', icon: 'temp', unit: '°C', max: 110, sub: (s) => s.gpuTemp == null ? 'Non disponible' : [s.gpuHotspot != null ? `Point chaud ${Math.round(s.gpuHotspot)} °C` : '', s.gpuPower != null ? `${Math.round(s.gpuPower)} W` : ''].filter(Boolean).join(' · ') || 'Pilote graphique' },
+  { k: 'cpuTemp', label: 'Température CPU', icon: 'temp', unit: '°C', max: 110, sub: (s) => s.cpuTemp == null ? sensorHint() : `${({ lhm: 'Capteur du processeur', cores: 'Capteur des cœurs', mb: 'Estimée : sonde CPU de la carte mère', acpi: 'Estimée : zone thermique ACPI' })[s.cpuTempSrc] || ''}${s.cpuPower != null ? ` · ${Math.round(s.cpuPower)} W` : ''}${s.vrmTemp != null ? ` · VRM ${Math.round(s.vrmTemp)} °C` : ''}` },
+  { k: 'gpuTemp', label: 'Température GPU', icon: 'temp', unit: '°C', max: 110, sub: (s) => s.gpuTemp == null ? 'Non disponible' : [s.gpuTempSrc === 'cpu' ? 'Estimée : GPU intégré (temp. du processeur)' : s.gpuTempSrc === 'hotspot' ? 'Estimée : point chaud du GPU' : '',s.gpuHotspot != null ? `Point chaud ${Math.round(s.gpuHotspot)} °C` : '', s.gpuPower != null ? `${Math.round(s.gpuPower)} W` : ''].filter(Boolean).join(' · ') || 'Pilote graphique' },
 ];
 PAGES.monitor = () => head('Monitoring', 'Charge, fréquences et débits en temps réel (rafraîchi toutes les ~1,5 s, 2 dernières minutes affichées).',
   `${S.sens?.pawnio && S.sens.pawnio !== 'running' ? `<button class="ghost" id="mon-hw" data-busy>${ic('temp')}Installer le pilote de capteurs</button>` : ''}<button class="ghost" id="mon-ov">${ic('monitor')}${S.overlayOn ? 'Masquer l’overlay' : 'Afficher l’overlay'}</button><button class="${S.mon.on ? 'danger' : 'primary'}" id="mon-toggle">${ic(S.mon.on ? 'stop' : 'play')}${S.mon.on ? 'Arrêter' : 'Démarrer'}</button>`) + `
@@ -508,6 +508,9 @@ function evGroupDetail(g) {
   const search = `https://www.google.com/search?q=${encodeURIComponent(`"${g.provider}" event ID ${g.id}`)}`;
   return `<div class="ev-detail">
     ${g.cause ? `<p><b>Cause probable :</b> ${esc(g.cause)}</p>` : ''}
+    ${g.details?.length ? `<ul class="ev-facts">${g.details.map(d => `<li>${esc(d)}</li>`).join('')}</ul>` : ''}
+    ${g.before ? `<p><b>Juste avant l’arrêt :</b> ${g.before.length ? esc(g.before.join(' ; ')) : 'aucune erreur ni avertissement dans les 15 minutes précédentes.'}</p>` : ''}
+    ${g.trend ? `<p class="mut" style="font-size:12.5px">${esc(g.trend)} · première fois le ${fmtDate(g.first)}</p>` : ''}
     ${g.action ? `<p><b>Que faire :</b> ${esc(g.action)}</p>` : ''}
     <div class="ev-samples">${g.samples.map(s => `<div><span class="t">${fmtDate(s.t)}</span><span>${esc(s.m)}</span></div>`).join('')}</div>
     <div class="actions" style="margin-top:10px">
