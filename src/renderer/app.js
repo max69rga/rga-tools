@@ -123,9 +123,14 @@ function setGlobal(pct, label) {
   $('#gprog-fill').style.width = `${pct < 0 ? 100 : Math.max(0, Math.min(100, pct))}%`;
   $('#gprog-pct').textContent = pct >= 0 ? `${pct}%` : '';
 }
-function toast(text, level = 'info') {
+function toast(text, level = 'info', opts = {}) {
   const t = document.createElement('div'); t.className = `toast ${level}`; t.textContent = text;
-  $('#toasts').appendChild(t); setTimeout(() => t.remove(), 4500);
+  if (opts.action) {
+    t.classList.add('clickable');
+    const a = document.createElement('b'); a.textContent = opts.action; t.append(' ', a);
+    t.onclick = () => { t.remove(); opts.onClick(); };
+  }
+  $('#toasts').appendChild(t); setTimeout(() => t.remove(), opts.ms || 4500);
 }
 function confirmBox(title, text, okLabel = 'Confirmer') {
   return new Promise((res) => {
@@ -915,7 +920,10 @@ function bindUpdate() {
   });
 }
 api.overlay.onState((on) => { S.overlayOn = on; if (S.page === 'monitor') { const b = $('#mon-ov'); if (b) b.innerHTML = `${ic('monitor')}${on ? 'Masquer l’overlay' : 'Afficher l’overlay'}`; } });
-api.update.onAvailable((r) => { S.upd.data = r; S.upd.state = 'available'; refreshUpdate(); toast(`Version ${r.version} de RGA Tools disponible.`, 'info'); });
+api.update.onAvailable((r) => { S.upd.data = r; S.upd.state = 'available'; refreshUpdate(); toast(`Version ${r.version} de RGA Tools disponible.`, 'info', {
+  action: 'Mettre à jour →', ms: 20000,
+  onClick: () => { if (S.page !== 'settings') go('settings'); const c = $('#upd-card'); if (c) { c.scrollIntoView({ behavior: 'smooth', block: 'center' }); c.classList.add('flash'); setTimeout(() => c.classList.remove('flash'), 1600); } },
+}); });
 api.update.onProgress((p) => { S.upd.pct = p; const bar = $('#upd-card .big-bar i'); if (bar) bar.style.width = `${Math.max(0, p)}%`; const b = $('#upd-card .desc b'); if (b) b.textContent = p >= 0 ? `${p} %` : ''; });
 
 // ─── Démarrage ───

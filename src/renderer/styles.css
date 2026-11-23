@@ -277,6 +277,8 @@ pre.out { background: var(--bg); border: 1px solid var(--border); border-radius:
 .modal-actions { display: flex; justify-content: flex-end; gap: 8px; margin-top: 20px; }
 .toasts { position: fixed; right: 18px; top: 52px; display: flex; flex-direction: column; gap: 8px; z-index: 60; }
 .toast { background: var(--surface-2); border: 1px solid var(--border-2); border-left: 3px solid var(--info); padding: 10px 14px; border-radius: 8px; font-size: 13px; box-shadow: var(--shadow); animation: tin .2s ease-out; max-width: 360px; }
+.toast.clickable { cursor: pointer; } .toast.clickable:hover { border-color: var(--info); } .toast.clickable b { color: var(--info); white-space: nowrap; }
+.card.flash { animation: flash 1.6s ease-out; } @keyframes flash { 0%, 40% { box-shadow: 0 0 0 2px var(--info); } 100% { box-shadow: 0 0 0 2px transparent; } }
 .toast.success { border-left-color: var(--ok); } .toast.warn { border-left-color: var(--warn); } .toast.error { border-left-color: var(--err); }
 @keyframes tin { from { opacity: 0; transform: translateY(-6px); } }
 .fade-in { animation: fin .18s ease-out; }

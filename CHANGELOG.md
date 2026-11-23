@@ -2,6 +2,11 @@
 
 Format inspiré de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/), versions selon [SemVer](https://semver.org/lang/fr/).
 
+## [3.4.4] — 2026-11-23
+
+### Modifié
+- La notification « nouvelle version disponible » affichée au démarrage est cliquable (« Mettre à jour → ») : elle ouvre les Paramètres sur la carte Mises à jour, mise en surbrillance. Elle reste affichée 20 secondes.
+
 ## [3.4.3] — 2026-11-20
 
 ### Ajouté
