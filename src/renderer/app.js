@@ -132,9 +132,9 @@ function toast(text, level = 'info', opts = {}) {
   }
   $('#toasts').appendChild(t); setTimeout(() => t.remove(), opts.ms || 4500);
 }
-function confirmBox(title, text, okLabel = 'Confirmer') {
+function confirmBox(title, text, okLabel = 'Confirmer', cancelLabel = 'Annuler') {
   return new Promise((res) => {
-    $('#modal-title').textContent = title; $('#modal-text').textContent = text; $('#modal-ok').textContent = okLabel;
+    $('#modal-title').textContent = title; $('#modal-text').textContent = text; $('#modal-ok').textContent = okLabel; $('#modal-cancel').textContent = cancelLabel;
     $('#modal').hidden = false;
     const done = (v) => { $('#modal').hidden = true; $('#modal-ok').onclick = $('#modal-cancel').onclick = null; res(v); };
     $('#modal-ok').onclick = () => done(true); $('#modal-cancel').onclick = () => done(false);
@@ -335,6 +335,10 @@ async function startDiag() {
   const id = S.diagProfile;
   if (id === 'extreme' && !(await confirmBox('Diagnostic extrême', 'Ce test pousse le CPU, la carte graphique, la RAM et l\'alimentation au maximum pendant ~15 minutes.\n\nIl n\'est PAS représentatif d\'un usage réel et n\'est pas plus complet que les autres : il sert à vérifier la stabilité et l\'alimentation.\n\nDes températures élevées sont normales. Le test s\'arrête automatiquement si la limite de température est atteinte.', 'Lancer le test extrême'))) return;
   if (!S.sys.admin && id !== 'config' && !(await confirmBox('Droits administrateur', 'Sans droits administrateur, le débit des disques et certaines données SMART ne pourront pas être mesurés.\n\nContinuer quand même ?', 'Continuer'))) return;
+  if (id !== 'config' && S.sys.admin && S.sens?.pawnio && S.sens.pawnio !== 'running') {
+    const inst = await confirmBox('Pilote de capteurs absent', 'Le pilote PawnIO n’est pas installé sur ce PC : sans lui, la température du processeur ne peut pas être lue pendant les tests, ni les arrêter en cas de surchauffe.\n\nL’installer maintenant ? C’est un pilote signé et open source, téléchargé depuis son GitHub officiel. Suivez l’assistant : le diagnostic démarre ensuite automatiquement.', 'Installer puis lancer', 'Continuer sans');
+    if (inst) await installPawnIO(false);
+  }
   const note = $('#diag-note')?.value.trim() || '';
   S.diag = { state: 'running', profile: id, note, steps: S.profiles[id].steps, cur: 0, pct: 0 };
   renderNav(); render(); showConsole();
@@ -439,10 +443,20 @@ function sensorHint() {
   if (S.sens?.pawnio && S.sens.pawnio !== 'running') return 'Pilote de capteurs PawnIO requis';
   return 'Capteur non disponible sur ce PC';
 }
-async function installPawnIO() {
-  if (!(await confirmBox('Pilote de capteurs PawnIO', 'RGA Tools va télécharger l’installeur officiel de PawnIO (GitHub, pilote signé et open source) et le lancer.\n\nSuivez l’assistant, puis relancez RGA Tools pour afficher la température du processeur.', 'Télécharger et installer'))) return;
+// Installe PawnIO puis attend qu'il soit actif ; renvoie true si les températures sont disponibles.
+async function installPawnIO(ask = true) {
+  if (ask !== false && !(await confirmBox('Pilote de capteurs PawnIO', 'RGA Tools va télécharger l’installeur officiel de PawnIO (GitHub, pilote signé et open source) et le lancer.\n\nSuivez l’assistant : la température du processeur apparaît dès la fin de l’installation.', 'Télécharger et installer'))) return false;
   setBusy(true); showConsole();
-  try { await api.sensors.installPawnIO(); } finally { setBusy(false); setGlobal(0, 'Prêt'); }
+  try {
+    if (!(await api.sensors.installPawnIO())) return false;
+    setGlobal(-1, 'En attente de la fin de l’installation de PawnIO…');
+    const st = await api.sensors.waitPawnIO();
+    S.sens = await api.sensors.status();
+    if (['monitor', 'settings'].includes(S.page)) rerender(S.page);
+    if (st === 'running') { toast('Pilote PawnIO installé : température du processeur disponible.', 'success'); return true; }
+    toast(st === 'stopped' ? 'PawnIO est installé mais pas démarré : redémarrez le PC.' : 'Installation de PawnIO non terminée.', 'warn');
+    return false;
+  } finally { setBusy(false); setGlobal(0, 'Prêt'); }
 }
 
 // ════════════════════ CONFIGURATION ════════════════════
@@ -841,6 +855,8 @@ PAGES.settings = () => {
       <label class="switch"><input type="checkbox" id="set-ov" ${st.overlay !== false ? 'checked' : ''}><span></span></label></div>
     <div class="row"><div class="tool-ic">${ic('temp')}</div><div class="grow"><b>Pilote de capteurs (PawnIO)</b><div class="sub">Pilote signé et open source utilisé par LibreHardwareMonitor pour lire la température et la consommation du processeur. À installer une fois par PC.</div></div>
       ${!S.sens ? '' : S.sens.pawnio === 'running' ? '<span class="tag ok">Installé</span>' : `<span class="tag warn">${S.sens.pawnio === 'stopped' ? 'Arrêté' : 'Absent'}</span><button class="primary sm" id="set-pawnio" data-busy>${ic('download')}Installer</button>`}</div>
+    <div class="row"><div class="tool-ic">${ic('list')}</div><div class="grow"><b>Relevé des capteurs</b><div class="sub">Enregistre la liste complète des capteurs détectés (processeur, pilote PawnIO, zones thermiques) dans un fichier texte. Utile quand une température n'apparaît pas.</div></div>
+      <button class="ghost sm" id="set-dump" data-busy>${ic('list')}Créer le relevé</button></div>
     <div class="row"><div class="tool-ic">${ic('gpu')}</div><div class="grow"><b>Ignorer le test 3D</b><div class="sub">Utile sur les PC sans carte graphique compatible ou en bureau à distance.</div></div>
       <label class="switch"><input type="checkbox" id="set-gpu" ${st.skipGpu ? 'checked' : ''}><span></span></label></div>
     <div class="row"><div class="tool-ic">${ic('cloud')}</div><div class="grow"><b>Vérifier les mises à jour au démarrage</b><div class="sub">Propose automatiquement les nouvelles versions publiées sur GitHub.</div></div>
@@ -865,6 +881,7 @@ BIND.settings = () => {
   $('#set-gpu').onchange = (e) => save({ skipGpu: e.target.checked });
   $('#set-ov').onchange = (e) => save({ overlay: e.target.checked });
   $('#set-pawnio') && ($('#set-pawnio').onclick = installPawnIO);
+  $('#set-dump').onclick = async () => { setBusy(true); try { await api.sensors.dump(); toast('Relevé des capteurs enregistré dans Diagnostics RGA.', 'success'); } finally { setBusy(false); } };
   $('#set-upd').onchange = (e) => save({ autoUpdate: e.target.checked });
   $('#set-qr').onchange = (e) => save({ shareQr: e.target.checked });
   bindUpdate();

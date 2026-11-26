@@ -206,6 +206,63 @@ async function pawnioStatus() {
   return 'missing';
 }
 ipcMain.handle('sensors:status', async () => ({ admin: isAdmin(), pawnio: await pawnioStatus(), last: monitor.last ? { cpuTemp: monitor.last.cpuTemp, cpuTempSrc: monitor.last.cpuTempSrc, gpuTemp: monitor.last.gpuTemp } : null }));
+// Relevé complet des capteurs (pour comprendre une température manquante sur un PC donné).
+ipcMain.handle('sensors:dump', async () => {
+  log('Relevé des capteurs en cours…');
+  const dll = path.join(monitor.LHM_DIR, 'LibreHardwareMonitorLib.dll').replace(/'/g, "''");
+  const r = await U.ps(`
+$ErrorActionPreference = 'Continue'
+[Console]::OutputEncoding = [Text.Encoding]::UTF8
+function T($t) { ''; "==== $t ====" }
+T 'Système'
+$c = Get-CimInstance Win32_Processor | Select-Object -First 1
+"Processeur : $($c.Name) [$($c.Manufacturer)]"
+$os = Get-CimInstance Win32_OperatingSystem; "Windows : $($os.Caption) $($os.Version)"
+$cs = Get-CimInstance Win32_ComputerSystem; "Machine : $($cs.Manufacturer) $($cs.Model)"
+$adm = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator); "Administrateur : $adm"
+try { $dg = Get-CimInstance -Namespace root/Microsoft/Windows/DeviceGuard Win32_DeviceGuard -ErrorAction Stop; "VBS : $($dg.VirtualizationBasedSecurityStatus) · services : $($dg.SecurityServicesRunning -join ',')" } catch {}
+T 'PawnIO'
+(sc.exe query PawnIO) -join [Environment]::NewLine
+Get-ItemProperty 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Uninstall\*','HKLM:\SOFTWARE\WOW6432Node\Microsoft\Windows\CurrentVersion\Uninstall\*' -ErrorAction SilentlyContinue | Where-Object { $_.DisplayName -like '*PawnIO*' } | ForEach-Object { "Installé : $($_.DisplayName) $($_.DisplayVersion)" }
+T 'Zones thermiques ACPI'
+Get-CimInstance Win32_PerfFormattedData_Counters_ThermalZoneInformation -ErrorAction SilentlyContinue | ForEach-Object { "$($_.Name) : $([math]::Round($_.HighPrecisionTemperature/10 - 273.15,1)) °C" }
+Get-CimInstance -Namespace root/wmi MSAcpi_ThermalZoneTemperature -ErrorAction SilentlyContinue | ForEach-Object { "$($_.InstanceName) : $([math]::Round($_.CurrentTemperature/10 - 273.15,1)) °C" }
+T 'LibreHardwareMonitor'
+try {
+  $a = [Reflection.Assembly]::LoadFrom('${dll}'); "Version : $($a.GetName().Version)"
+  $pc = New-Object LibreHardwareMonitor.Hardware.Computer
+  $pc.IsCpuEnabled = $true; $pc.IsGpuEnabled = $true; $pc.IsMotherboardEnabled = $true; $pc.IsStorageEnabled = $true; $pc.IsMemoryEnabled = $true
+  $pc.Open()
+  foreach ($h in $pc.Hardware) { $h.Update(); foreach ($s in $h.SubHardware) { $s.Update() } }
+  Start-Sleep -Milliseconds 800
+  foreach ($h in $pc.Hardware) { $h.Update(); foreach ($s in $h.SubHardware) { $s.Update() } }
+  foreach ($h in $pc.Hardware) {
+    ''; "[$($h.HardwareType)] $($h.Name)"
+    foreach ($s in (@($h.Sensors) + @($h.SubHardware | ForEach-Object { $_.Sensors }))) { "  $($s.SensorType) · $($s.Name) = $($s.Value)" }
+  }
+  T 'Rapport LibreHardwareMonitor'
+  $pc.GetReport()
+  $pc.Close()
+} catch { "ERREUR : $($_.Exception.ToString())" }
+`, { timeout: 90000, name: 'releve-capteurs' });
+  const dir = path.join(app.getPath('desktop'), 'Diagnostics RGA'); fs.mkdirSync(dir, { recursive: true });
+  const file = path.join(dir, `capteurs_${os.hostname().replace(/[^\w-]/g, '')}_${new Date().toISOString().slice(0, 16).replace(/[:T]/g, '-')}.txt`);
+  fs.writeFileSync(file, `Relevé des capteurs — RGA Tools v${app.getVersion()}\r\n${r.out}${r.err ? `\r\n==== Erreurs PowerShell ====\r\n${r.err}` : ''}`, 'utf8');
+  log(`Relevé enregistré : ${file}`, 'success');
+  shell.openPath(file);
+  return file;
+});
+// Attend la fin de l'assistant PawnIO, puis relance la lecture des capteurs pour prendre en compte le pilote.
+ipcMain.handle('sensors:waitPawnIO', async () => {
+  const setupRunning = async () => /PawnIO_setup/i.test((await run('tasklist /FI "IMAGENAME eq PawnIO_setup.exe" /NH')).out);
+  for (let i = 0; i < 300; i++) {
+    const st = await pawnioStatus();
+    if (st === 'running') { monitor.restart(); log('Pilote PawnIO actif : lecture des températures relancée.', 'success'); return st; }
+    if (i >= 3 && !(await setupRunning())) return st;
+    await U.sleep(2000);
+  }
+  return pawnioStatus();
+});
 ipcMain.handle('sensors:installPawnIO', async () => {
   try {
     log('Recherche de la dernière version de PawnIO…');
@@ -218,7 +275,7 @@ ipcMain.handle('sensors:installPawnIO', async () => {
     log(`Téléchargement de PawnIO ${rel.tag_name}…`);
     await download(asset.browser_download_url, file, (pct) => progress('global', pct, 'Téléchargement de PawnIO'));
     progress('global', 100, 'PawnIO téléchargé');
-    log("Installeur PawnIO lancé : suivez l'assistant, puis redémarrez RGA Tools.", 'success');
+    log("Installeur PawnIO lancé : suivez l'assistant.", 'success');
     launch(file);
     return true;
   } catch (e) { log(`PawnIO : ${e.message}`, 'error'); return false; }

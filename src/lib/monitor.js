@@ -113,7 +113,8 @@ class Monitor {
         try { this.ingest(JSON.parse(l)); } catch {}
       }
     });
-    this.child.on('close', () => { this.child = null; });
+    const c = this.child;
+    c.on('close', () => { if (this.child === c) this.child = null; });
   }
   ingest(raw) {
     const total = os.totalmem(), free = os.freemem();
@@ -154,6 +155,8 @@ class Monitor {
     for (const fn of this.listeners) fn(s);
   }
   stop() { if (this.child) { try { this.child.kill(); } catch {} this.child = null; } }
+  // Relance la lecture des capteurs (ex. après l'installation de PawnIO) si elle tourne.
+  restart() { if (this.child) { this.stop(); this.start(); } }
   on(fn) { this.listeners.add(fn); this.start(); return () => { this.listeners.delete(fn); }; }
   // Enregistre les échantillons sur une fenêtre de temps.
   record() {

@@ -2,6 +2,12 @@
 
 Format inspiré de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/), versions selon [SemVer](https://semver.org/lang/fr/).
 
+## [3.4.5] — 2026-11-26
+
+### Ajouté
+- **Installation de PawnIO proposée au lancement d'un diagnostic** de charge quand le pilote est absent (sans lui, pas de température du processeur ni d'arrêt en cas de surchauffe). Une fois l'assistant terminé, la lecture des capteurs est relancée et le diagnostic démarre automatiquement, sans redémarrer RGA Tools. Même comportement pour les boutons « Installer » des Paramètres et du Monitoring.
+- **Relevé des capteurs** (Paramètres) : enregistre dans un fichier texte le processeur, les droits administrateur, l'état et la version de PawnIO, les zones thermiques ACPI, tous les capteurs de LibreHardwareMonitor et son rapport interne. Sert à comprendre une température manquante sur un PC donné.
+
 ## [3.4.4] — 2026-11-23
 
 ### Modifié
