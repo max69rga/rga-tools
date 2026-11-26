@@ -306,7 +306,7 @@ ipcMain.handle('diag:run', async (_e, { profile, note }) => {
       if (stress && settings.overlay && !overlayManual) hideOverlay();
     }
     if (!R) return null;
-    if (settings.shareQr) await share.start();
+    if (settings.shareQr) { await share.start(); if (await share.firewall() === 'failed') log('QR code : impossible d’ouvrir le port 47610 dans le pare-feu Windows (droits administrateur requis). Le téléphone ne pourra pas ouvrir le rapport.', 'warn'); }
     R.reportFile = report.save(R, path.join(ASSETS, 'logo-rga.png'), settings.shareQr ? share.urlFor : null);
     log(`Rapport enregistré : ${R.reportFile}`, 'success');
     return R;

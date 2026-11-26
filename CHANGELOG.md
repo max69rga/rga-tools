@@ -2,6 +2,12 @@
 
 Format inspiré de [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/), versions selon [SemVer](https://semver.org/lang/fr/).
 
+## [3.4.6] — 2026-11-26
+
+### Corrigé
+- **QR code du rapport qui ne s'ouvrait pas sur le smartphone** : le pare-feu Windows bloquait la connexion. RGA Tools crée maintenant la règle « RGA Tools - rapports sur smartphone » (port 47610, réseau local uniquement, réseaux privés et d'entreprise). Un avertissement s'affiche dans le journal si elle ne peut pas être créée.
+- L'adresse mise dans le QR code est celle de la carte réseau reliée à la box (route par défaut), et non plus une carte choisie d'après son nom.
+
 ## [3.4.5] — 2026-11-26
 
 ### Ajouté
